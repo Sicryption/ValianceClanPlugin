@@ -12,11 +12,31 @@ public class ChatMessageStream implements IMessageStream {
         this.client = client;
     }
 
+    private String generateStringWithSeparator(StringBuilder builder)
+    {
+        String messageAsString = builder.toString();
+        String messageSpaceSeperated = "";
+
+        for (int i = 0; i < messageAsString.length(); i++){
+            char c = messageAsString.charAt(i);
+
+            if (c == '[')
+            {
+                messageSpaceSeperated += " ";
+            }
+
+            messageSpaceSeperated += c;
+        }
+
+        return messageSpaceSeperated;
+    }
+
     @Override
     public void send(IMessage message) {
         StringBuilder stringBuilder = new StringBuilder();
         message.write(stringBuilder);
 
-		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Drop received: " + stringBuilder.toString(), null);
+        // Break message down per line
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Drop received:" + generateStringWithSeparator(stringBuilder), null);
     }
 }

@@ -62,7 +62,7 @@ public class ClanEventHelperPlugin extends Plugin
 		}
 
 		// Create message
-		DropMessage message = new DropMessage(client.getAccountHash(), config.clanUsername(), event.getItems());
+		DropMessage message = new DropMessage(client.getAccountHash(), config.clanUsername(), config.clanEventKeyword(), event.getItems());
 
 		messenger.send(message);
 	}
