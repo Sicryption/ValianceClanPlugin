@@ -1,11 +1,11 @@
-package com.example;
+package com.encryptiron;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup("example")
-public interface ExampleConfig extends Config
+@ConfigGroup("encryptiron")
+public interface ClanEventHelperConfig extends Config
 {
 	@ConfigItem(
 		keyName = "greeting",
