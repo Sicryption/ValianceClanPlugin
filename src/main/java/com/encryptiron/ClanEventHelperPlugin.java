@@ -8,9 +8,11 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.loottracker.LootReceived;
 
 @Slf4j
 @PluginDescriptor(
@@ -24,30 +26,44 @@ public class ClanEventHelperPlugin extends Plugin
 	@Inject
 	private ClanEventHelperConfig config;
 
+	private Messenger messenger;
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		log.info("ClanEventHelperPlugin started!");
+
+		messenger = new Messenger(config, client);
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.info("Example stopped!");
-	}
+		log.info("ClanEventHelperPlugin stopped!");
 
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
-	{
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
-		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Example says " + config.greeting(), null);
-		}
+		messenger = null;
 	}
 
 	@Provides
 	ClanEventHelperConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(ClanEventHelperConfig.class);
+	}
+
+	@Subscribe
+	public void onLootReceived(final LootReceived event)
+	{
+		RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
+
+		// Only support main game drops
+		if (profileType != RuneScapeProfileType.STANDARD)
+		{
+			return;
+		}
+
+		// Create message
+		DropMessage message = new DropMessage(client.getAccountHash(), config.clanUsername(), event.getItems());
+
+		messenger.send(message);
 	}
 }

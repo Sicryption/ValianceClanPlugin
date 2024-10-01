@@ -8,12 +8,22 @@ import net.runelite.client.config.ConfigItem;
 public interface ClanEventHelperConfig extends Config
 {
 	@ConfigItem(
-		keyName = "greeting",
-		name = "Welcome Greeting",
-		description = "The message to show to the user when they login"
+		keyName = "clanUsername",
+		name = "Clan name to submit to",
+		description = "Name within the clan to submit drops to"
 	)
-	default String greeting()
+	default String clanUsername()
 	{
-		return "Hello";
+		return "YOUR_USERNAME";
+	}
+
+	@ConfigItem(
+		keyName = "debug",
+		name = "Enable debug",
+		description = "Results in the plugin logging output to the users chatbox"
+	)
+	default Boolean debug()
+	{
+		return false;
 	}
 }
