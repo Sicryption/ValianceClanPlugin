@@ -1,8 +1,8 @@
 package com.encryptiron;
 
-import net.runelite.client.game.ItemStack;
-
 import java.util.Collection;
+
+import net.runelite.client.game.ItemStack;
 
 public class DropMessage implements IMessage {
 

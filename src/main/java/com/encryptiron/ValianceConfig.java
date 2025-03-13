@@ -5,7 +5,7 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
 @ConfigGroup("encryptiron")
-public interface ClanEventHelperConfig extends Config
+public interface ValianceConfig extends Config
 {
 	@ConfigItem(
 		keyName = "clanUsername",

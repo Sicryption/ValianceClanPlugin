@@ -6,11 +6,12 @@
     "configurations": [
         {
             "type": "java",
-            "name": "ClanEventHelperPluginTest",
+            "name": "ValianceClanPluginTest",
             "request": "launch",
-            "mainClass": "com.encryptiron.ClanEventHelperPluginTest",
-            "projectName": "claneventhelper",
-            "vmArgs": "-ea"
+            "mainClass": "com.encryptiron.ValianceClanPluginTest",
+            "projectName": "ValianceClanPlugin",
+            "vmArgs": "-ea",
+            "args": "--developer-mode"
         },
     ]
 }

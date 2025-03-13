@@ -1,15 +1,13 @@
 package com.encryptiron;
 
-import com.encryptiron.ClanEventHelperPlugin;
-
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
-public class ClanEventHelperPluginTest
+public class ValianceClanPluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(ClanEventHelperPlugin.class);
+		ExternalPluginManager.loadBuiltin(ValianceClanPlugin.class);
 		RuneLite.main(args);
 	}
 }

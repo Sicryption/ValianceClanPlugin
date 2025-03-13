@@ -6,7 +6,7 @@ public class Messenger {
 
     private ChatMessageStream chatMessageStream;
 
-    Messenger(ClanEventHelperConfig config, Client client)
+    Messenger(ValianceConfig config, Client client)
     {
         this.config = config;
 
@@ -24,5 +24,5 @@ public class Messenger {
         // Upload to destination
     }
     
-	private ClanEventHelperConfig config;
+	private ValianceConfig config;
 }
