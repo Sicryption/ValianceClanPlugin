@@ -7,12 +7,27 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
+import com.encryptiron.rest.BaseRestCommand.MessageSendStatus;
+
+import net.runelite.api.events.GameTick;
+import net.runelite.client.eventbus.Subscribe;
+
 public abstract class BaseRestCommand {
+
+    private MessageSendStatus messageStatus = MessageSendStatus.None;
+    private IOException lastException;
 
     final String DEVELOPMENT_URL = "http://127.0.0.1:5000";
     final String PRODUCTION_URL = "http://valianceosrs.com";
 
-    public void send() throws IOException
+    enum MessageSendStatus
+    {
+        Success,
+        Fail,
+        None
+    }
+
+    private void writeMessageToServer() throws IOException
     {
         URL url = new URL(DEVELOPMENT_URL + endpoint());
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -40,8 +55,44 @@ public abstract class BaseRestCommand {
             System.out.println("Successful " + requestType() + ", response: " + response.toString());
         }
     }
+
+    public void send()
+    {
+        Thread sendThread = new Thread(() -> {
+            try
+            {
+                writeMessageToServer();
+                messageStatus = MessageSendStatus.Success;
+            }
+            catch (IOException ex)
+            {
+                lastException = ex;
+                messageStatus = MessageSendStatus.Fail;
+            }
+        });
+
+        sendThread.start();
+    }
     
     abstract String requestType();
     abstract String endpoint();
     abstract String body();
+
+	@Subscribe
+    public void onGameTick(GameTick gameTick)
+    {
+        if (messageStatus == MessageSendStatus.Success)
+        {
+            onSendSuccess();
+        }
+        else if (messageStatus == MessageSendStatus.Fail)
+        {
+            onSendFail(lastException);
+        }
+
+        messageStatus = MessageSendStatus.None;
+    }
+    
+    abstract void onSendSuccess();
+    abstract void onSendFail(IOException exception);
 }
