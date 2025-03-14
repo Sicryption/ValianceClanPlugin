@@ -8,35 +8,24 @@ import net.runelite.client.config.ConfigItem;
 public interface ValianceConfig extends Config
 {
 	@ConfigItem(
-		keyName = "clanUsername",
-		name = "Clan name to submit to",
-		description = "Name within the clan to submit drops to",
-		position = 1
-	)
-	default String clanUsername()
-	{
-		return "YOUR_USERNAME";
-	}
-
-	@ConfigItem(
-		keyName = "clanEventKeyword",
-		name = "Clan Event Keyword",
-		description = "Keyword for the active clan event",
-		position = 2
-	)
-	default String clanEventKeyword()
-	{
-		return "KEYWORD";
-	}
-
-	@ConfigItem(
 		keyName = "debug",
 		name = "Enable debug",
-		description = "Results in the plugin logging output to the users chatbox",
-		position = 3
+		description = "Results in the plugin logging debug output to the users chatbox",
+		position = 1
 	)
 	default boolean debug()
 	{
-		return true;
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "valianceServerUrl",
+		name = "Server URL",
+		description = "URL to the Valiance Server (don't change)",
+		position = 2
+	)
+	default String valianceServerUrl()
+	{
+		return "valianceosrs.com";
 	}
 }
