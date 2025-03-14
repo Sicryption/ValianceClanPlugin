@@ -7,11 +7,11 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-import com.encryptiron.rest.BaseRestCommand.MessageSendStatus;
-
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
 
+@Slf4j
 public abstract class BaseRestCommand {
 
     private MessageSendStatus messageStatus = MessageSendStatus.None;
@@ -52,7 +52,7 @@ public abstract class BaseRestCommand {
             while ((responseLine = br.readLine()) != null) {
                 response.append(responseLine.trim());
             }
-            System.out.println("Successful " + requestType() + ", response: " + response.toString());
+            log.debug("Successful " + requestType() + ", response: " + response.toString());
         }
     }
 

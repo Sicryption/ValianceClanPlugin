@@ -1,5 +1,7 @@
 package com.encryptiron.rest;
 
+import static com.encryptiron.rest.BaseRestCommand.log;
+
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -8,6 +10,7 @@ import javax.inject.Inject;
 
 import com.encryptiron.ValianceConfig;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.MenuAction;
@@ -19,6 +22,7 @@ import net.runelite.api.widgets.InterfaceID;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 
+@Slf4j
 public class SendCollectionLog extends PostCommand
 {
 	public HashMap<Integer, Integer> collection_log_map = new HashMap<>();
@@ -156,6 +160,6 @@ public class SendCollectionLog extends PostCommand
             return;
 
         client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Collection log to the Valiance server.", "ValianceClanPlugin");
-        System.out.println("Failed to send collection log data: " + exception.getMessage());
+        log.debug("Failed to send collection log data: " + exception.getMessage());
     }
 }

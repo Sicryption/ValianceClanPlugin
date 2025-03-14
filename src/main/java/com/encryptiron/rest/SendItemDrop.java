@@ -14,6 +14,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.loottracker.LootReceived;
 
+@Slf4j
 public class SendItemDrop extends PostCommand
 {
     @Inject
@@ -78,6 +79,6 @@ public class SendItemDrop extends PostCommand
             return;
             
         client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send item drop to the Valiance server.", "ValianceClanPlugin");
-        System.out.println("Failed to send item drop data: " + exception.getMessage());
+        log.debug("Failed to send item drop data: " + exception.getMessage());
     }
 }
