@@ -1,7 +1,5 @@
 package com.encryptiron.rest;
 
-import static com.encryptiron.rest.BaseRestCommand.log;
-
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -156,10 +154,11 @@ public class SendCollectionLog extends PostCommand
     @Override
     void onSendFail(IOException exception)
     {
+        log.debug("Failed to send collection log data: " + exception.getMessage());
+
         if (!config.debug())
             return;
 
         client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Collection log to the Valiance server.", "ValianceClanPlugin");
-        log.debug("Failed to send collection log data: " + exception.getMessage());
     }
 }

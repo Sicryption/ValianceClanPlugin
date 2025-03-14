@@ -7,6 +7,7 @@ import javax.inject.Inject;
 
 import com.encryptiron.ValianceConfig;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.client.config.RuneScapeProfileType;
@@ -75,10 +76,11 @@ public class SendItemDrop extends PostCommand
     @Override
     void onSendFail(IOException exception)
     {
+        log.debug("Failed to send item drop data: " + exception.getMessage());
+        
         if (!config.debug())
             return;
             
         client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send item drop to the Valiance server.", "ValianceClanPlugin");
-        log.debug("Failed to send item drop data: " + exception.getMessage());
     }
 }
