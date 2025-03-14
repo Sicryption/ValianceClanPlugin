@@ -6,8 +6,6 @@ import java.util.Map;
 
 import javax.inject.Inject;
 
-import com.encryptiron.ValianceConfig;
-
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -29,9 +27,6 @@ public class SendCollectionLog extends PostCommand
 
     @Inject
 	private Client client;
-
-	@Inject
-	public ValianceConfig config;
 
     @Override
     String endpoint() {

@@ -7,6 +7,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
+import javax.inject.Inject;
+
+import com.encryptiron.ValianceConfig;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
@@ -17,8 +21,11 @@ public abstract class BaseRestCommand {
     private MessageSendStatus messageStatus = MessageSendStatus.None;
     private IOException lastException;
 
-    final String DEVELOPMENT_URL = "http://127.0.0.1:5000";
-    final String PRODUCTION_URL = "http://valianceosrs.com";
+    private final String MESSAGING_PROTOCOL = "http://";
+    private final int PORT = 8080;
+
+    @Inject
+    public ValianceConfig config;
 
     enum MessageSendStatus
     {
@@ -29,7 +36,7 @@ public abstract class BaseRestCommand {
 
     private void writeMessageToServer() throws IOException
     {
-        URL url = new URL(DEVELOPMENT_URL + endpoint());
+        URL url = new URL(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint());
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
     
         connection.setRequestMethod(requestType());

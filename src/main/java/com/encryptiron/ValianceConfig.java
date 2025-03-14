@@ -11,10 +11,21 @@ public interface ValianceConfig extends Config
 		keyName = "debug",
 		name = "Enable debug",
 		description = "Results in the plugin logging debug output to the users chatbox",
-		position = 3
+		position = 1
 	)
 	default boolean debug()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "valianceServerUrl",
+		name = "Server URL",
+		description = "URL to the Valiance Server (don't change)",
+		position = 2
+	)
+	default String valianceServerUrl()
+	{
+		return "valianceosrs.com";
 	}
 }
