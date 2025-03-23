@@ -86,7 +86,8 @@ public class SendCollectionLog extends PostCommand
         // Tick 0, This tick
         // Tick 1, Search opens & closes
         // Tick 2, Messages are fired
-        // Tick 3, Collect all messages & fire them off to the server
+        // Tick 3, Collect all messages
+        // Tick 4, Fire them off to the server
 		if (hasClogData > 0 && --hasClogData == 0)
 		{
             this.send();
@@ -100,7 +101,7 @@ public class SendCollectionLog extends PostCommand
 			collection_log_map = new HashMap<>();
 			client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
 			client.runScript(2240);
-			hasClogData = 3;
+			hasClogData = 4;
 
             if (config.debug())
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sending your Collection log to the Valiance server...", "ValianceClanPlugin");

@@ -1,10 +1,7 @@
 package com.encryptiron.rest;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 import javax.inject.Inject;
@@ -14,15 +11,26 @@ import com.encryptiron.ValianceConfig;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.eventbus.Subscribe;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Request.Builder;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 
 @Slf4j
 public abstract class BaseRestCommand {
+    private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
+    private static final String MESSAGING_PROTOCOL = "http://";
+    private static final int PORT = 8080;
 
     private MessageSendStatus messageStatus = MessageSendStatus.None;
     private IOException lastException;
 
-    private final String MESSAGING_PROTOCOL = "http://";
-    private final int PORT = 8080;
+    @Inject
+    private OkHttpClient httpClient;
 
     @Inject
     public ValianceConfig config;
@@ -34,48 +42,57 @@ public abstract class BaseRestCommand {
         None
     }
 
-    private void writeMessageToServer() throws IOException
+    private void writeMessageToServer()
     {
-        URL url = new URL(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint());
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-    
-        connection.setRequestMethod(requestType());
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setDoOutput(true);
-    
-        String headerBody = MessageHeaderData.getMessageHeaderJson();
-        String requestBody = body();
-
-        String body = "{ " + headerBody + ", " + requestBody + " }";
-        try (OutputStream os = connection.getOutputStream()) {
-            byte[] input = body.getBytes("utf-8");
-            os.write(input, 0, input.length);
-        }
-    
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), "utf-8")))
+        URL url;
+        try
         {
-            StringBuilder response = new StringBuilder();
-            String responseLine = null;
-            while ((responseLine = br.readLine()) != null) {
-                response.append(responseLine.trim());
-            }
-            log.debug("Successful " + requestType() + ", response: " + response.toString());
+            url = new URL(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint());
+        } catch (MalformedURLException e)
+        {
+            log.error("MalformedURL : " + e.getMessage());
+            return;
         }
+    
+        String headerContent = MessageHeaderData.getMessageHeaderJson();
+        String messageContent = "{ " + headerContent + ", " + body() + " }";
+
+        RequestBody requestBody = RequestBody.create(APPLICATION_JSON, messageContent);
+
+        Request httpRequest = new Builder()
+            .url(url)
+            .header("User-Agent", "ValiancePlugin - " + MessageHeaderData.getPlayerName())
+            .post(requestBody)
+            .build();
+
+        httpClient.newCall(httpRequest).enqueue(new Callback() 
+        {
+            @Override
+            public void onFailure(Call call, final IOException ex) {
+                lastException = ex;
+                messageStatus = MessageSendStatus.Fail;
+                log.info("Failed to send request " + ex.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (!response.isSuccessful())
+                {
+                    onFailure(call, new IOException("Unexpected code: " + response));
+                }
+                else
+                {
+                    log.info("Successful " + requestType() + ", response: " + response.body().string());
+                    messageStatus = MessageSendStatus.Success;
+                }
+            }
+        });
     }
 
     public void send()
     {
         Thread sendThread = new Thread(() -> {
-            try
-            {
-                writeMessageToServer();
-                messageStatus = MessageSendStatus.Success;
-            }
-            catch (IOException ex)
-            {
-                lastException = ex;
-                messageStatus = MessageSendStatus.Fail;
-            }
+            writeMessageToServer();
         });
 
         sendThread.start();
