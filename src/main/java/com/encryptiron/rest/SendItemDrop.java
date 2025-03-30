@@ -5,8 +5,6 @@ import java.util.Collection;
 
 import javax.inject.Inject;
 
-import com.encryptiron.ValianceConfig;
-
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -19,10 +17,7 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 public class SendItemDrop extends PostCommand
 {
     @Inject
-	private Client client;
-
-	@Inject
-	public ValianceConfig config;
+    private Client client;
 
     private Collection<ItemStack> items;
     private String npcName;
@@ -51,18 +46,18 @@ public class SendItemDrop extends PostCommand
         return "\"item_drop\" : { \"name\" : \"" + npcName + "\", \"quantity\" : " + npcQuantity + ", \"items\" : { " + item_list + " } }";
     }
     
-	@Subscribe
-	public void onLootReceived(final LootReceived event)
-	{
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+    @Subscribe
+    public void onLootReceived(final LootReceived event)
+    {
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
         npcName = event.getName();
         npcQuantity = event.getAmount();
         items = event.getItems();
 
         this.send();
-	}
+    }
 
     @Override
     void onSendSuccess()
