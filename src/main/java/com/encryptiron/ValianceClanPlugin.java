@@ -45,6 +45,13 @@ public class ValianceClanPlugin extends Plugin
 		eventBus.register(sendItemDrop);
 	}
 
+	@Override
+	protected void shutDown() throws Exception
+	{
+		eventBus.unregister(sendCollectionLog);
+		eventBus.unregister(sendItemDrop);
+	}
+
 	@Provides
 	ValianceConfig getConfig(ConfigManager configManager)
 	{
