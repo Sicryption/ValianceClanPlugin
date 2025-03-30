@@ -19,6 +19,7 @@ import okhttp3.Request;
 import okhttp3.Request.Builder;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 @Slf4j
 public abstract class BaseRestCommand {
@@ -76,14 +77,17 @@ public abstract class BaseRestCommand {
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                if (!response.isSuccessful())
+                try (ResponseBody responseBody = response.body())
                 {
-                    onFailure(call, new IOException("Unexpected code: " + response));
-                }
-                else
-                {
-                    log.info("Successful " + requestType() + ", response: " + response.body().string());
-                    messageStatus = MessageSendStatus.Success;
+                    if (!response.isSuccessful())
+                    {
+                        onFailure(call, new IOException("Unexpected code: " + response.code()));
+                    }
+                    else
+                    {
+                        log.info("Successful " + requestType() + ", response: " + responseBody.string());
+                        messageStatus = MessageSendStatus.Success;
+                    }
                 }
             }
         });

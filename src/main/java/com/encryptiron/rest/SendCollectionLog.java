@@ -144,7 +144,7 @@ public class SendCollectionLog extends PostCommand
         if (!config.debug())
             return;
 
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent your Collection log to the Valiance server!", "ValianceClanPlugin");
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent Collection log progress to the Valiance server!", "ValianceClanPlugin");
     }
 
     @Override
@@ -155,6 +155,6 @@ public class SendCollectionLog extends PostCommand
         if (!config.debug())
             return;
 
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Collection log to the Valiance server.", "ValianceClanPlugin");
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Collection log progress to the Valiance server.", "ValianceClanPlugin");
     }
 }

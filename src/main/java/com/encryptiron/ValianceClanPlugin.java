@@ -4,6 +4,7 @@ import javax.inject.Inject;
 
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.SendCollectionLog;
+import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
 import com.google.inject.Provides;
 
@@ -31,6 +32,9 @@ public class ValianceClanPlugin extends Plugin
 
 	@Inject
 	public SendCollectionLog sendCollectionLog;
+
+	@Inject
+	public SendCombatAchievements sendCombatAchievements;
 	
 	@Inject
 	public SendItemDrop sendItemDrop;
@@ -42,6 +46,7 @@ public class ValianceClanPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		eventBus.register(sendCollectionLog);
+		eventBus.register(sendCombatAchievements);
 		eventBus.register(sendItemDrop);
 	}
 
@@ -49,6 +54,7 @@ public class ValianceClanPlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		eventBus.unregister(sendCollectionLog);
+		eventBus.unregister(sendCombatAchievements);
 		eventBus.unregister(sendItemDrop);
 	}
 
