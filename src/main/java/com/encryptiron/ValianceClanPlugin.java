@@ -19,55 +19,55 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Valiance",
-	description="Valiance clan plugin to help automate events."
+    name = "Valiance",
+    description="Valiance clan plugin to help automate events."
 )
 public class ValianceClanPlugin extends Plugin
 {
-	@Inject
-	private Client client;
-	
-	@Inject
-	public ValianceConfig config;
+    @Inject
+    private Client client;
+    
+    @Inject
+    public ValianceConfig config;
 
-	@Inject
-	public SendCollectionLog sendCollectionLog;
+    @Inject
+    public SendCollectionLog sendCollectionLog;
 
-	@Inject
-	public SendCombatAchievements sendCombatAchievements;
-	
-	@Inject
-	public SendItemDrop sendItemDrop;
+    @Inject
+    public SendCombatAchievements sendCombatAchievements;
+    
+    @Inject
+    public SendItemDrop sendItemDrop;
 
-	@Inject
-	private EventBus eventBus;
+    @Inject
+    private EventBus eventBus;
 
-	@Override
-	protected void startUp() throws Exception
-	{
-		eventBus.register(sendCollectionLog);
-		eventBus.register(sendCombatAchievements);
-		eventBus.register(sendItemDrop);
-	}
+    @Override
+    protected void startUp() throws Exception
+    {
+        eventBus.register(sendCollectionLog);
+        eventBus.register(sendCombatAchievements);
+        eventBus.register(sendItemDrop);
+    }
 
-	@Override
-	protected void shutDown() throws Exception
-	{
-		eventBus.unregister(sendCollectionLog);
-		eventBus.unregister(sendCombatAchievements);
-		eventBus.unregister(sendItemDrop);
-	}
+    @Override
+    protected void shutDown() throws Exception
+    {
+        eventBus.unregister(sendCollectionLog);
+        eventBus.unregister(sendCombatAchievements);
+        eventBus.unregister(sendItemDrop);
+    }
 
-	@Provides
-	ValianceConfig getConfig(ConfigManager configManager)
-	{
-		return configManager.getConfig(ValianceConfig.class);
-	}
+    @Provides
+    ValianceConfig getConfig(ConfigManager configManager)
+    {
+        return configManager.getConfig(ValianceConfig.class);
+    }
 
-	@Subscribe
-	public void onPlayerChanged(PlayerChanged playerChanged)
-	{
-		if (playerChanged.getPlayer().getId() == client.getLocalPlayer().getId())
-			MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
-	}
+    @Subscribe
+    public void onPlayerChanged(PlayerChanged playerChanged)
+    {
+        if (playerChanged.getPlayer().getId() == client.getLocalPlayer().getId())
+            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+    }
 }

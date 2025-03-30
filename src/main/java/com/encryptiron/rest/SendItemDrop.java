@@ -17,7 +17,7 @@ import net.runelite.client.plugins.loottracker.LootReceived;
 public class SendItemDrop extends PostCommand
 {
     @Inject
-	private Client client;
+    private Client client;
 
     private Collection<ItemStack> items;
     private String npcName;
@@ -46,18 +46,18 @@ public class SendItemDrop extends PostCommand
         return "\"item_drop\" : { \"name\" : \"" + npcName + "\", \"quantity\" : " + npcQuantity + ", \"items\" : { " + item_list + " } }";
     }
     
-	@Subscribe
-	public void onLootReceived(final LootReceived event)
-	{
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+    @Subscribe
+    public void onLootReceived(final LootReceived event)
+    {
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
         npcName = event.getName();
         npcQuantity = event.getAmount();
         items = event.getItems();
 
         this.send();
-	}
+    }
 
     @Override
     void onSendSuccess()

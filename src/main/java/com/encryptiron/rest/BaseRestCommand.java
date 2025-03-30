@@ -106,7 +106,7 @@ public abstract class BaseRestCommand {
     abstract String endpoint();
     abstract String body();
 
-	@Subscribe
+    @Subscribe
     public void onGameTick(GameTick gameTick)
     {
         if (messageStatus == MessageSendStatus.Success)

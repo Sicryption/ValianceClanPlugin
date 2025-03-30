@@ -54,7 +54,7 @@ public class SendCombatAchievements extends PostCommand
     private HashMap<Integer, Boolean> caCompletedMap;
 
     @Inject
-	private Client client;
+    private Client client;
 
     @Override
     String endpoint() {
@@ -87,11 +87,11 @@ public class SendCombatAchievements extends PostCommand
         return "\"combat_achievements\" : [" + caList + "]";
     }
     
-	@Subscribe
+    @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
         if (widgetLoaded.getGroupId() == COMBAT_ACHIEVEMENTS_OVERVIEW_INTERFACE_ID)
         {

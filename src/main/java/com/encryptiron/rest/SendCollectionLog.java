@@ -21,12 +21,12 @@ import net.runelite.client.eventbus.Subscribe;
 @Slf4j
 public class SendCollectionLog extends PostCommand
 {
-	public HashMap<Integer, Integer> collection_log_map = new HashMap<>();
-	public boolean isClogOpen = false;
-	public int hasClogData = 0;
+    public HashMap<Integer, Integer> collection_log_map = new HashMap<>();
+    public boolean isClogOpen = false;
+    public int hasClogData = 0;
 
     @Inject
-	private Client client;
+    private Client client;
 
     @Override
     String endpoint() {
@@ -54,32 +54,32 @@ public class SendCollectionLog extends PostCommand
         return "\"collection_log\" : {" + coll_log_list + "}";
     }
     
-	@Subscribe
-	public void onScriptPreFired(ScriptPreFired preFired)
+    @Subscribe
+    public void onScriptPreFired(ScriptPreFired preFired)
     {
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
-		if (preFired.getScriptId() == 4100)
+        if (preFired.getScriptId() == 4100)
         {
-			var args = preFired.getScriptEvent().getArguments();
+            var args = preFired.getScriptEvent().getArguments();
 
-			// 0 -> Script Id
-			// 1 -> Item Id
-			// 2 -> Quantity
-			// 3 & 4 -> ???
-			collection_log_map.put((int)args[1], (int)args[2]);
-		}
-	}
+            // 0 -> Script Id
+            // 1 -> Item Id
+            // 2 -> Quantity
+            // 3 & 4 -> ???
+            collection_log_map.put((int)args[1], (int)args[2]);
+        }
+    }
 
-	@Subscribe
+    @Subscribe
     @Override
-	public void onGameTick(GameTick gameTick)
+    public void onGameTick(GameTick gameTick)
     {
         super.onGameTick(gameTick);
 
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD || !isClogOpen)
-			return;
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD || !isClogOpen)
+            return;
 
         // When searching, all clogs get fired through a script we can capture
         // We don't really know when it ends, it seems to always come 1 tick after a search start or end
@@ -89,48 +89,48 @@ public class SendCollectionLog extends PostCommand
         // Tick 2, Messages are fired
         // Tick 3, Collect all messages
         // Tick 4, Fire them off to the server
-		if (hasClogData > 0 && --hasClogData == 0)
-		{
+        if (hasClogData > 0 && --hasClogData == 0)
+        {
             this.send();
 
             // Clog isn't actually closed, but we don't want to loop submitting clog data
             isClogOpen = false;
-		}
+        }
         else if (hasClogData == 0)
-		{
+        {
             // Force the search menu option, and then cancel it
-			collection_log_map = new HashMap<>();
-			client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
-			client.runScript(2240);
-			hasClogData = 4;
+            collection_log_map = new HashMap<>();
+            client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
+            client.runScript(2240);
+            hasClogData = 4;
 
             if (config.debug())
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sending your Collection log to the Valiance server...", "ValianceClanPlugin");
-		}
-	}
+        }
+    }
     
-	@Subscribe
+    @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
         if (widgetLoaded.getGroupId() == InterfaceID.COLLECTION_LOG)
         {
-			isClogOpen = true;
+            isClogOpen = true;
             hasClogData = 0;
         }
     }
 
-	@Subscribe
+    @Subscribe
     public void onWidgetClosed(WidgetClosed widgetClosed)
     {
-		if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-			return;
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
 
         if (widgetClosed.getGroupId() == InterfaceID.COLLECTION_LOG)
         {
-			isClogOpen = false;
+            isClogOpen = false;
 
             if (hasClogData > 0)
             {
