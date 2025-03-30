@@ -5,8 +5,6 @@ import java.util.Collection;
 
 import javax.inject.Inject;
 
-import com.encryptiron.ValianceConfig;
-
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -20,9 +18,6 @@ public class SendItemDrop extends PostCommand
 {
     @Inject
 	private Client client;
-
-	@Inject
-	public ValianceConfig config;
 
     private Collection<ItemStack> items;
     private String npcName;

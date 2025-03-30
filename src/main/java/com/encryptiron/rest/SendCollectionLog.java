@@ -73,6 +73,7 @@ public class SendCollectionLog extends PostCommand
 	}
 
 	@Subscribe
+    @Override
 	public void onGameTick(GameTick gameTick)
     {
         super.onGameTick(gameTick);

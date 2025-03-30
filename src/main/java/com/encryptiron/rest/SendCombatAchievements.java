@@ -134,7 +134,7 @@ public class SendCombatAchievements extends PostCommand
     @Override
     void onSendFail(IOException exception)
     {
-        log.debug("Failed to send collection log data: " + exception.getMessage());
+        log.debug("Failed to send Combat Achievement progress: " + exception.getMessage());
 
         if (!config.debug())
             return;
