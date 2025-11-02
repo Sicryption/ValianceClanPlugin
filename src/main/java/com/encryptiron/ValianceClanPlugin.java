@@ -48,6 +48,11 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendCollectionLog);
         eventBus.register(sendCombatAchievements);
         eventBus.register(sendItemDrop);
+
+        if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null)
+        {
+            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+        }
     }
 
     @Override
