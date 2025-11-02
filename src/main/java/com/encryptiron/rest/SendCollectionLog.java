@@ -132,7 +132,7 @@ public class SendCollectionLog extends PostCommand
         {
             isClogOpen = false;
 
-            if (hasClogData > 0)
+            if (hasClogData > 0 && config.debug())
             {
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Aborting sending Collection log data to the Valiance server.", "ValianceClanPlugin");
             }
