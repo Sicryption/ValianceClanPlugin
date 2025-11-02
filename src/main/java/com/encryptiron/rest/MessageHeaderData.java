@@ -2,6 +2,8 @@ package com.encryptiron.rest;
 
 import java.time.Instant;
 
+import com.google.gson.JsonObject;
+
 public final class MessageHeaderData 
 {
     private static String playerName = "NA";
@@ -16,8 +18,12 @@ public final class MessageHeaderData
         MessageHeaderData.playerName = playerName;
     }
 
-    public static String getMessageHeaderJson()
+    public static JsonObject getMessageHeaderJson()
     {
-        return "\"header\" : { \"player_name\" : \"" + getPlayerName() + "\", \"time\" : " + Instant.now().toEpochMilli() + " }";
+        JsonObject headerData = new JsonObject();
+        headerData.addProperty("player_name", getPlayerName());
+        headerData.addProperty("time", Instant.now().toEpochMilli());
+        
+        return headerData;
     }
 }

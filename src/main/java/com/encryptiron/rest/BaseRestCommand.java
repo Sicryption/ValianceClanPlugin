@@ -21,6 +21,8 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
+import com.google.gson.JsonObject;
+
 @Slf4j
 public abstract class BaseRestCommand {
     private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
@@ -55,10 +57,11 @@ public abstract class BaseRestCommand {
             return;
         }
     
-        String headerContent = MessageHeaderData.getMessageHeaderJson();
-        String messageContent = "{ " + headerContent + ", " + body() + " }";
+        JsonObject header = MessageHeaderData.getMessageHeaderJson();
+        JsonObject body = body();
+        body.add("header", header);
 
-        RequestBody requestBody = RequestBody.create(APPLICATION_JSON, messageContent);
+        RequestBody requestBody = RequestBody.create(APPLICATION_JSON, body.toString());
 
         Request httpRequest = new Builder()
             .url(url)
@@ -104,7 +107,7 @@ public abstract class BaseRestCommand {
     
     abstract String requestType();
     abstract String endpoint();
-    abstract String body();
+    abstract JsonObject body();
 
     @Subscribe
     public void onGameTick(GameTick gameTick)

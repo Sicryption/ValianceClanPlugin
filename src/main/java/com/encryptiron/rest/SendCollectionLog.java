@@ -6,6 +6,8 @@ import java.util.Map;
 
 import javax.inject.Inject;
 
+import com.google.gson.JsonObject;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -34,24 +36,19 @@ public class SendCollectionLog extends PostCommand
     }
     
     @Override
-    String body()
+    JsonObject body()
     {
-        String coll_log_list = "";
+        JsonObject collectionLogBody = new JsonObject();
 
         for (Map.Entry<Integer, Integer> entry : collection_log_map.entrySet())
         {
-            if (!coll_log_list.isEmpty())
-            {
-                coll_log_list += ", ";
-            }
-
-            Integer itemId = entry.getKey();
-            Integer quantity = entry.getValue();
-
-            coll_log_list += "\"" + itemId + "\" : " + quantity;
+            collectionLogBody.addProperty(Integer.toString(entry.getKey()), entry.getValue());
         }
 
-        return "\"collection_log\" : {" + coll_log_list + "}";
+        JsonObject collectionLog = new JsonObject();
+        collectionLog.add("collection_log", collectionLogBody);
+
+        return collectionLog;
     }
     
     @Subscribe

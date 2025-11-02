@@ -5,6 +5,9 @@ import java.util.Collection;
 
 import javax.inject.Inject;
 
+import com.formdev.flatlaf.json.Json;
+import com.google.gson.JsonObject;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -29,21 +32,24 @@ public class SendItemDrop extends PostCommand
     }
     
     @Override
-    String body()
+    JsonObject body()
     {
-        String item_list = "";
-
+        JsonObject itemsJson = new JsonObject();
+        
         for (ItemStack item : items)
         {
-            if (!item_list.isEmpty())
-            {
-                item_list += ", ";
-            }
-
-            item_list += "\"" + item.getId() + "\" : " + item.getQuantity();
+            itemsJson.addProperty(Integer.toString(item.getId()), item.getQuantity());
         }
 
-        return "\"item_drop\" : { \"name\" : \"" + npcName + "\", \"quantity\" : " + npcQuantity + ", \"items\" : { " + item_list + " } }";
+        JsonObject itemDrop = new JsonObject();
+        itemDrop.addProperty("name", npcName);
+        itemDrop.addProperty("quantity", npcQuantity);
+        itemDrop.add("items", itemsJson);
+
+        JsonObject itemDropObject = new JsonObject();
+        itemDropObject.add("item_drop", itemDrop);
+
+        return itemDropObject;
     }
     
     @Subscribe

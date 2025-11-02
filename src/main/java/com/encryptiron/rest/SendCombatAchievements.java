@@ -5,6 +5,9 @@ import java.util.HashMap;
 
 import javax.inject.Inject;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
@@ -64,13 +67,12 @@ public class SendCombatAchievements extends PostCommand
     }
     
     @Override
-    String body()
+    JsonObject body()
     {
-        String caList = "";
+        JsonArray caArray = new JsonArray();
 
         for (HashMap.Entry<Integer, Boolean> entry : caCompletedMap.entrySet())
         {
-            Integer id = entry.getKey();
             Boolean completed = entry.getValue();
 
             if (!completed)
@@ -78,15 +80,13 @@ public class SendCombatAchievements extends PostCommand
                 continue;
             }
 
-            if (!caList.isEmpty())
-            {
-                caList += ", ";
-            }
-
-            caList += id;
+            caArray.add(entry.getKey());
         }
 
-        return "\"combat_achievements\" : [" + caList + "]";
+        JsonObject cas = new JsonObject();
+        cas.add("combat_achievements", caArray);
+
+        return cas;
     }
     
     @Subscribe
