@@ -40,7 +40,7 @@ public class SendCombatAchievements extends PostCommand
         VarPlayerID.CA_TASK_COMPLETED_16, 
         VarPlayerID.CA_TASK_COMPLETED_17, 
         VarPlayerID.CA_TASK_COMPLETED_18,
-        4721 // CA_TASK_COMPLETED_19 https://github.com/Joshua-F/osrs-dumps/blob/6351730c232a7ccb88702a783ad4f0dfab355397/config/dump.varp#L14181
+        VarPlayerID.CA_TASK_COMPLETED_19
     };
 
     // https://github.com/runelite/cs2-scripts/blob/7efea5b51540e8d35875152b323e19d7e52faf10/scripts/%5Bproc%2Cscript4834%5D.cs2#L4
