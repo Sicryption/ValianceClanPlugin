@@ -9,7 +9,7 @@
             "name": "ValianceClanPluginTest",
             "request": "launch",
             "mainClass": "com.encryptiron.ValianceClanPluginTest",
-            "projectName": "valianceclanplugin",
+            "projectName": "ValianceClanPlugin",
             "vmArgs": "-ea",
             "args": "--developer-mode"
         },

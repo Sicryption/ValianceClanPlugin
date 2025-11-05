@@ -4,6 +4,7 @@ import javax.inject.Inject;
 
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
+import com.encryptiron.rest.OnBossKilled;
 import com.encryptiron.rest.SendCollectionLog;
 import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
@@ -44,6 +45,9 @@ public class ValianceClanPlugin extends Plugin
     public NewCollectionLogEntry newClogEntry;
 
     @Inject
+    public OnBossKilled onBossKilled;
+
+    @Inject
     private EventBus eventBus;
 
     @Override
@@ -53,6 +57,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendCombatAchievements);
         eventBus.register(sendItemDrop);
         eventBus.register(newClogEntry);
+        eventBus.register(onBossKilled);
 
         if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null)
         {
@@ -67,6 +72,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(sendCombatAchievements);
         eventBus.unregister(sendItemDrop);
         eventBus.unregister(newClogEntry);
+        eventBus.unregister(onBossKilled);
     }
 
     @Provides
