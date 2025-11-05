@@ -11,24 +11,54 @@ import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.MenuAction;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
-import net.runelite.api.widgets.InterfaceID;
+import net.runelite.api.gameval.VarPlayerID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 
 @Slf4j
 public class SendCollectionLog extends PostCommand
 {
-    public HashMap<Integer, Integer> collection_log_map = new HashMap<>();
+    private static final Map<Integer, Integer> DUPLICATE_CLOG_ITEMS = Map.of(
+        12013, 29472, // Prospector helmet
+        12014, 29474, // Prospector jacket
+        12015, 29476, // Prospector legs
+        12016, 29478  // Prospector boots
+    );
+
+    public HashMap<Integer, Integer> collectionLogMap = new HashMap<>();
     public boolean isClogOpen = false;
-    public int hasClogData = 0;
+    public boolean collectingClogData = false;
+
+    private int numClogsAccordingToVarp = -1;
 
     @Inject
     private Client client;
+
+    // Some items appear multiple times in the collection log, under different
+    // item ids, and they do not get counted towards our collection log total.
+    private int getCollectionLogMapCount()
+    {
+        int count = collectionLogMap.size();
+
+        for (Map.Entry<Integer, Integer> entry : DUPLICATE_CLOG_ITEMS.entrySet())
+        {
+            if (collectionLogMap.containsKey(entry.getKey()) && collectionLogMap.containsKey(entry.getValue()))
+            {
+                count--;
+            }
+        }
+
+        return count;
+    }
 
     @Override
     String endpoint() {
@@ -40,7 +70,7 @@ public class SendCollectionLog extends PostCommand
     {
         JsonObject collectionLogBody = new JsonObject();
 
-        for (Map.Entry<Integer, Integer> entry : collection_log_map.entrySet())
+        for (Map.Entry<Integer, Integer> entry : collectionLogMap.entrySet())
         {
             collectionLogBody.addProperty(Integer.toString(entry.getKey()), entry.getValue());
         }
@@ -49,6 +79,29 @@ public class SendCollectionLog extends PostCommand
         collectionLog.add("collection_log", collectionLogBody);
 
         return collectionLog;
+    }
+    
+
+    @Subscribe
+    public void onVarbitChanged(VarbitChanged varbitChanged)
+    {
+        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
+            return;
+
+        if (varbitChanged.getVarpId() == VarPlayerID.COLLECTION_COUNT)
+        {
+            numClogsAccordingToVarp = client.getVarpValue(varbitChanged.getVarpId());
+        }
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+	{
+		if (event.getGameState() == GameState.LOGIN_SCREEN ||
+            event.getGameState() == GameState.HOPPING)
+		{
+            numClogsAccordingToVarp = -1;
+		}
     }
     
     @Subscribe
@@ -65,7 +118,7 @@ public class SendCollectionLog extends PostCommand
             // 1 -> Item Id
             // 2 -> Quantity
             // 3 & 4 -> ???
-            collection_log_map.put((int)args[1], (int)args[2]);
+            collectionLogMap.put((int)args[1], (int)args[2]);
         }
     }
 
@@ -86,23 +139,39 @@ public class SendCollectionLog extends PostCommand
         // Tick 2, Messages are fired
         // Tick 3, Collect all messages
         // Tick 4, Fire them off to the server
-        if (hasClogData > 0 && --hasClogData == 0)
-        {
-            this.send();
-
-            // Clog isn't actually closed, but we don't want to loop submitting clog data
-            isClogOpen = false;
-        }
-        else if (hasClogData == 0)
+        if (!collectingClogData)
         {
             // Force the search menu option, and then cancel it
-            collection_log_map = new HashMap<>();
+            collectionLogMap = new HashMap<>();
             client.menuAction(-1, 40697932, MenuAction.CC_OP, 1, -1, "Search", null);
             client.runScript(2240);
-            hasClogData = 4;
+            collectingClogData = true;
 
             if (config.debug())
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sending your Collection log to the Valiance server...", "ValianceClanPlugin");
+        }
+        else
+        {
+            if (numClogsAccordingToVarp == -1)
+            {
+                if (config.debug())
+                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Unable to send Colletion Log to Valiance, Relog and Open Clog", "ValianceClanPlugin");
+                    
+                isClogOpen = false;
+                collectingClogData = false;
+                return;
+            }
+
+            if (numClogsAccordingToVarp != getCollectionLogMapCount())
+            {
+                // Clogs are loading, we must wait for them to all load in
+                return;
+            }
+
+            // We have the same number of clogs as the varp says we should have, let's send them
+            this.send();
+            isClogOpen = false;
+            collectingClogData = false;
         }
     }
     
@@ -112,10 +181,10 @@ public class SendCollectionLog extends PostCommand
         if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
             return;
 
-        if (widgetLoaded.getGroupId() == InterfaceID.COLLECTION_LOG)
+        if (widgetLoaded.getGroupId() == InterfaceID.COLLECTION)
         {
             isClogOpen = true;
-            hasClogData = 0;
+            collectingClogData = false;
         }
     }
 
@@ -125,11 +194,11 @@ public class SendCollectionLog extends PostCommand
         if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
             return;
 
-        if (widgetClosed.getGroupId() == InterfaceID.COLLECTION_LOG)
+        if (widgetClosed.getGroupId() == InterfaceID.COLLECTION)
         {
             isClogOpen = false;
 
-            if (hasClogData > 0 && config.debug())
+            if (collectingClogData && config.debug())
             {
                 client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Aborting sending Collection log data to the Valiance server.", "ValianceClanPlugin");
             }
