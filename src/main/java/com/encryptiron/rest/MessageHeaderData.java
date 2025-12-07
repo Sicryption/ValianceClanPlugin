@@ -6,7 +6,7 @@ import com.google.gson.JsonObject;
 
 public final class MessageHeaderData 
 {
-    private static String playerName = "NA";
+    private static String playerName = null;
 
     public static String getPlayerName()
     {
@@ -16,6 +16,11 @@ public final class MessageHeaderData
     public static void setPlayerName(String playerName)
     {
         MessageHeaderData.playerName = playerName;
+    }
+
+    public static void resetPlayerName()
+    {
+        MessageHeaderData.playerName = null;
     }
 
     public static JsonObject getMessageHeaderJson()

@@ -47,6 +47,13 @@ public abstract class BaseRestCommand {
 
     private void writeMessageToServer()
     {
+        if (MessageHeaderData.getPlayerName() == null)
+        {
+            // The player hasn't fully logged in yet, this means this message is the server catching us up
+            // on what the player has, after login / hop. We can skip sending this message as we don't care about it.
+            return;
+        }
+
         URL url;
         try
         {
