@@ -45,7 +45,7 @@ public abstract class BaseRestCommand {
         None
     }
 
-    private void writeMessageToServer()
+    private void writeMessageToServer(JsonObject body)
     {
         if (MessageHeaderData.getPlayerName() == null)
         {
@@ -65,7 +65,6 @@ public abstract class BaseRestCommand {
         }
     
         JsonObject header = MessageHeaderData.getMessageHeaderJson();
-        JsonObject body = body();
         body.add("header", header);
 
         RequestBody requestBody = RequestBody.create(APPLICATION_JSON, body.toString());
@@ -105,8 +104,11 @@ public abstract class BaseRestCommand {
 
     public void send()
     {
+        // Prepare the body outside of the thread, in case there are any delays
+        JsonObject body = body();
+        
         Thread sendThread = new Thread(() -> {
-            writeMessageToServer();
+            writeMessageToServer(body);
         });
 
         sendThread.start();
