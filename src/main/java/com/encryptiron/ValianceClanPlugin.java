@@ -20,6 +20,7 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 @Slf4j
 @PluginDescriptor(
@@ -52,9 +53,17 @@ public class ValianceClanPlugin extends Plugin
     @Inject
     private EventBus eventBus;
 
+	@Inject
+	private OverlayManager overlayManager;
+
+	@Inject
+	private RSNOverlay overlay;
+
     @Override
     protected void startUp() throws Exception
     {
+        overlayManager.add(overlay);
+
         eventBus.register(sendCollectionLog);
         eventBus.register(sendCombatAchievements);
         eventBus.register(sendItemDrop);
@@ -64,12 +73,18 @@ public class ValianceClanPlugin extends Plugin
         if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null)
         {
             MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+
+            // If the player has been logged in, then we will have missed the varp change events that
+            // happen during login. So we will manually scan and update our collection log count here.
+            sendCollectionLog.updateNumClogsAccordingToVarp();
         }
     }
 
     @Override
     protected void shutDown() throws Exception
     {
+        overlayManager.remove(overlay);
+
         eventBus.unregister(sendCollectionLog);
         eventBus.unregister(sendCombatAchievements);
         eventBus.unregister(sendItemDrop);
@@ -77,6 +92,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(onBossKilled);
         
         MessageHeaderData.resetPlayerName();
+        sendCollectionLog.resetNumClogsAccordingToVarp();
     }
 
     @Provides

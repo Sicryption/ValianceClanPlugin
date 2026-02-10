@@ -103,6 +103,16 @@ public class SendCollectionLog extends PostCommand
             numClogsAccordingToVarp = -1;
 		}
     }
+
+    public void updateNumClogsAccordingToVarp()
+    {
+        numClogsAccordingToVarp = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
+    }
+
+    public void resetNumClogsAccordingToVarp()
+    {
+        numClogsAccordingToVarp = -1;
+    }
     
     @Subscribe
     public void onScriptPreFired(ScriptPreFired preFired)
