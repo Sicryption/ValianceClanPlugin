@@ -22,9 +22,6 @@ public class NewCollectionLogEntry extends PostCommand
     public int collectionLogEntryId = 0;
     private int lastKnownCollectionLogEntryId = 0;
 
-    @Inject
-    private Client client;
-
     @Override
     String endpoint() {
         return "/api/member/new_collection_log";
@@ -90,22 +87,14 @@ public class NewCollectionLogEntry extends PostCommand
     }
 
     @Override
-    void onSendSuccess()
+    String onRequestFailedMessage()
     {
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent the newly obtained collection log item to the Valiance server!", "ValianceClanPlugin");
+        return "Failed to send the newly obtained collection log item to the Valiance server.";
     }
 
     @Override
-    void onSendFail(IOException exception)
+    String onTextResponseMessage()
     {
-        log.debug("Failed to send collection log data: " + exception.getMessage());
-
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send the newly obtained collection log item to the Valiance server.", "ValianceClanPlugin");
+        return "Sent the newly obtained collection log item to the Valiance server!";
     }
 }

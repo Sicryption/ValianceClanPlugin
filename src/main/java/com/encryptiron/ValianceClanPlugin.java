@@ -64,6 +64,10 @@ public class ValianceClanPlugin extends Plugin
         if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null)
         {
             MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+
+            // If the player has been logged in, then we will have missed the varp change events that
+            // happen during login. So we will manually scan and update our collection log count here.
+            sendCollectionLog.updateNumClogsAccordingToVarp();
         }
     }
 
@@ -77,6 +81,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(onBossKilled);
         
         MessageHeaderData.resetPlayerName();
+        sendCollectionLog.resetNumClogsAccordingToVarp();
     }
 
     @Provides
