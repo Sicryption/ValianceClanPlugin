@@ -1,6 +1,5 @@
 package com.encryptiron.rest;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,9 +38,6 @@ public class SendCollectionLog extends PostCommand
     public boolean collectingClogData = false;
 
     private int numClogsAccordingToVarp = -1;
-
-    @Inject
-    private Client client;
 
     // Some items appear multiple times in the collection log, under different
     // item ids, and they do not get counted towards our collection log total.
@@ -133,11 +129,8 @@ public class SendCollectionLog extends PostCommand
     }
 
     @Subscribe
-    @Override
     public void onGameTick(GameTick gameTick)
     {
-        super.onGameTick(gameTick);
-
         if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD || !isClogOpen)
             return;
 
@@ -214,24 +207,16 @@ public class SendCollectionLog extends PostCommand
             }
         }
     }
-
+    
     @Override
-    void onSendSuccess()
+    String onRequestFailedMessage()
     {
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent Collection log progress to the Valiance server!", "ValianceClanPlugin");
+        return "Failed to send Collection Log progress to the Valiance server.";
     }
 
     @Override
-    void onSendFail(IOException exception)
+    String onTextResponseMessage()
     {
-        log.debug("Failed to send collection log data: " + exception.getMessage());
-
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Collection log progress to the Valiance server.", "ValianceClanPlugin");
+        return "Sent Collection log progress to the Valiance server!";
     }
 }

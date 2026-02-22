@@ -1,6 +1,5 @@
 package com.encryptiron.rest;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -9,8 +8,8 @@ import javax.inject.Inject;
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.config.RuneScapeProfileType;
@@ -98,9 +97,7 @@ public class OnBossKilled extends PostCommand
 
     private String bossKilled;
     private int bossKillCount;
-
-    @Inject
-    private Client client;
+    private boolean sendNextTick = false;
 
     @Override
     String endpoint() {
@@ -141,6 +138,12 @@ public class OnBossKilled extends PostCommand
         // that we've killed this boss, and update all of our kill counts
         if (varpIdToBossName.containsKey(varbitChanged.getVarpId()))
         {
+            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+            {
+                // Ignore varbits on player first log-in
+                return;
+            }
+            
             bossKilled = varpIdToBossName.get(varbitChanged.getVarpId());
             bossKillCount = client.getVarpValue(varbitChanged.getVarpId());
 
@@ -150,27 +153,31 @@ public class OnBossKilled extends PostCommand
                 return;
             }
 
-            send();
+            // We may load several boss kill counts at once on login / hop, so we want to wait until 
+            // the next tick to send the message to ensure we only send one message with the most up to date boss kill counts.
+            sendNextTick = true;
         }
     }
 
     @Override
-    void onSendSuccess()
+    String onRequestFailedMessage()
     {
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent Boss Killed message to the Valiance server!", "ValianceClanPlugin");
+        return "Failed to send Boss Killed message to the Valiance server.";
     }
 
     @Override
-    void onSendFail(IOException exception)
+    String onTextResponseMessage()
     {
-        log.debug("Failed to send boss killed message: " + exception.getMessage());
+        return "Sent Boss Killed message to the Valiance server!";
+    }
 
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Boss Killed message to the Valiance server.", "ValianceClanPlugin");
+    @Subscribe
+    public void onGameTick(GameTick gameTick)
+    {
+        if (sendNextTick)
+        {
+            send();
+            sendNextTick = false;
+        }
     }
 }

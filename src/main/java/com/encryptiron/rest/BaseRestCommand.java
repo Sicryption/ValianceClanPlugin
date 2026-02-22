@@ -9,7 +9,13 @@ import javax.inject.Inject;
 import com.encryptiron.ValianceConfig;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
 import net.runelite.api.events.GameTick;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -22,15 +28,14 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 @Slf4j
 public abstract class BaseRestCommand {
+    private static final Logger log = LoggerFactory.getLogger(BaseRestCommand.class);
     private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
     private static final String MESSAGING_PROTOCOL = "http://";
     private static final int PORT = 8080;
-
-    private MessageSendStatus messageStatus = MessageSendStatus.None;
-    private IOException lastException;
 
     @Inject
     private OkHttpClient httpClient;
@@ -38,12 +43,11 @@ public abstract class BaseRestCommand {
     @Inject
     public ValianceConfig config;
 
-    enum MessageSendStatus
-    {
-        Success,
-        Fail,
-        None
-    }
+    @Inject
+    public Client client;
+
+    @Inject
+    public ClientThread clientThread;
 
     private void writeMessageToServer(JsonObject body)
     {
@@ -78,26 +82,45 @@ public abstract class BaseRestCommand {
         httpClient.newCall(httpRequest).enqueue(new Callback() 
         {
             @Override
-            public void onFailure(Call call, final IOException ex) {
-                lastException = ex;
-                messageStatus = MessageSendStatus.Fail;
-                log.info("Failed to send request " + ex.getMessage());
-            }
-
-            @Override
             public void onResponse(Call call, Response response) throws IOException {
                 try (ResponseBody responseBody = response.body())
                 {
                     if (!response.isSuccessful())
                     {
-                        onFailure(call, new IOException("Unexpected code: " + response.code()));
+                        clientThread.invokeLater(() -> {
+                            onFailCodeResponse(httpRequest, response);
+                        });
                     }
                     else
                     {
-                        log.info("Successful " + requestType() + ", response: " + responseBody.string());
-                        messageStatus = MessageSendStatus.Success;
+                        String bodyString = responseBody.string();
+
+                        // Our responses are normally not JSON,
+                        // but if they are, we want the client to do something in response
+                        try
+                        {
+                            JsonParser parser = new JsonParser();
+                            JsonObject json = parser.parse(bodyString).getAsJsonObject();
+
+                            clientThread.invokeLater(() -> {
+                                onJsonResponse(httpRequest, json);
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            clientThread.invokeLater(() -> {
+                                onTextResponse(httpRequest, bodyString);
+                            });
+                        }
                     }
                 }
+            }
+
+            @Override
+            public void onFailure(Call call, IOException e) {
+                clientThread.invokeLater(() -> {
+                    onRequestFailed(httpRequest, e);
+                });
             }
         });
     }
@@ -107,6 +130,8 @@ public abstract class BaseRestCommand {
         // Prepare the body outside of the thread, in case there are any delays
         JsonObject body = body();
         
+        // We want to send the message in a separate thread so that we 
+        // don't block the game client while waiting for the response
         Thread sendThread = new Thread(() -> {
             writeMessageToServer(body);
         });
@@ -117,22 +142,59 @@ public abstract class BaseRestCommand {
     abstract String requestType();
     abstract String endpoint();
     abstract JsonObject body();
-
-    @Subscribe
-    public void onGameTick(GameTick gameTick)
-    {
-        if (messageStatus == MessageSendStatus.Success)
-        {
-            onSendSuccess();
-        }
-        else if (messageStatus == MessageSendStatus.Fail)
-        {
-            onSendFail(lastException);
-        }
-
-        messageStatus = MessageSendStatus.None;
-    }
+    abstract String onRequestFailedMessage();
+    abstract String onTextResponseMessage();
     
-    abstract void onSendSuccess();
-    abstract void onSendFail(IOException exception);
+    public void onJsonResponse(Request request, JsonObject json)
+    {
+        log.info("Received json response: " + json.toString());
+        
+        // The parent class should override this function if they want to do something with the response
+    }
+
+    public void onTextResponse(Request request, String response)
+    {
+        log.info("Received text response: " + response);
+
+        if (!config.debug())
+            return;
+
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onTextResponseMessage(), "ValianceClanPlugin");
+    }
+
+    public void onFailCodeResponse(Request request, Response response)
+    {
+        log.info("Received failed code response: " + response.code());
+
+        try
+        {
+            // If we sent back an error, let's print it for debug purposes.
+            String bodyString = response.body().string();            
+            JsonParser parser = new JsonParser();
+            JsonObject json = parser.parse(bodyString).getAsJsonObject();
+            String error = json.get("string").getAsString();
+
+            log.debug("Error received when sending message: " + error);
+        }
+        catch(Exception ex)
+        {
+            // Json parsing error, no error given
+        }
+
+        sendFailMessage();
+    }
+
+    public void onRequestFailed(Request request, IOException exception)
+    {
+        log.info("Failed to send request " + exception.getMessage());
+        sendFailMessage();
+    }
+
+    public void sendFailMessage()
+    {
+        if (!config.debug())
+            return;
+
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onRequestFailedMessage(), "ValianceClanPlugin");
+    }
 }

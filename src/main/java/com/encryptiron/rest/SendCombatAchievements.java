@@ -1,17 +1,17 @@
 package com.encryptiron.rest;
 
-import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
-
-import javax.inject.Inject;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
-import net.runelite.api.Client;
+import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
@@ -19,11 +19,11 @@ import net.runelite.client.eventbus.Subscribe;
 @Slf4j
 public class SendCombatAchievements extends PostCommand
 {
-    public static int COMBAT_ACHIEVEMENTS_OVERVIEW_INTERFACE_ID = 717;
+    public static final int COMBAT_ACHIEVEMENTS_OVERVIEW_INTERFACE_ID = 717;
     
     // This will continue to grow as more CAs get added
     // https://github.com/runelite/cs2-scripts/blob/7efea5b51540e8d35875152b323e19d7e52faf10/scripts/%5Bproc%2Cscript4834%5D.cs2#L4
-    public static int[] caVarpIds = new int[] {
+    public static final int[] caVarpIds = new int[] {
         VarPlayerID.CA_TASK_COMPLETED_0, 
         VarPlayerID.CA_TASK_COMPLETED_1, 
         VarPlayerID.CA_TASK_COMPLETED_2, 
@@ -47,7 +47,7 @@ public class SendCombatAchievements extends PostCommand
     };
 
     // https://github.com/runelite/cs2-scripts/blob/7efea5b51540e8d35875152b323e19d7e52faf10/scripts/%5Bproc%2Cscript4834%5D.cs2#L4
-    public static int[] caTierEnums = new int[] {
+    public static final int[] caTierEnums = new int[] {
         3981, // Easy
         3982, // Medium
         3983, // Hard
@@ -55,11 +55,19 @@ public class SendCombatAchievements extends PostCommand
         3985, // Master
         3986  // Grandmaster
     };
+    
+    public static final Set<Integer> caInterfaceIds = new HashSet<>(
+        Arrays.asList(
+            InterfaceID.CA_TASKS,
+            InterfaceID.CA_BOSS,
+            InterfaceID.CA_BOSSES,
+            InterfaceID.CA_OVERVIEW,
+            InterfaceID.CA_REWARDS
+        ));
 
     private HashMap<Integer, Boolean> caCompletedMap;
 
-    @Inject
-    private Client client;
+    Set<Integer> openCaInterfaceIds = new HashSet<>();
 
     @Override
     String endpoint() {
@@ -95,11 +103,29 @@ public class SendCombatAchievements extends PostCommand
         if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
             return;
 
-        if (widgetLoaded.getGroupId() == COMBAT_ACHIEVEMENTS_OVERVIEW_INTERFACE_ID)
+        if (caInterfaceIds.contains(widgetLoaded.getGroupId()))
         {
-            collectCombatAchievementDataFromVarbits();
-            send();
+            if (openCaInterfaceIds.isEmpty())
+            {
+                collectCombatAchievementDataFromVarbits();
+                send();
+            }
+
+            // When switching CA menus, each menu is in its own group, so we want
+            // to collect the open interface ids and remove them when closed.
+            // Only shooting out the message when any of the CA menus are first loaded.
+            openCaInterfaceIds.add(widgetLoaded.getGroupId());
         }
+    }
+
+    @Subscribe
+    public void onWidgetClosed(WidgetClosed widgetClosed)
+    {
+        // We remove these widgets on the next tick such that
+        // openCaInterfaceIds is not empty when the next CA submenu is opened.
+        clientThread.invokeLater(() -> {
+            openCaInterfaceIds.remove(widgetClosed.getGroupId());
+        });
     }
 
     void collectCombatAchievementDataFromVarbits()
@@ -125,22 +151,14 @@ public class SendCombatAchievements extends PostCommand
     }
 
     @Override
-    void onSendSuccess()
+    String onRequestFailedMessage()
     {
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Sent Combat Achievement progress to the Valiance server!", "ValianceClanPlugin");
+        return "Failed to send Combat Achievement progress to the Valiance server.";
     }
 
     @Override
-    void onSendFail(IOException exception)
+    String onTextResponseMessage()
     {
-        log.debug("Failed to send Combat Achievement progress: " + exception.getMessage());
-
-        if (!config.debug())
-            return;
-
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Failed to send Combat Achievement progress to the Valiance server.", "ValianceClanPlugin");
+        return "Sent Combat Achievement progress to the Valiance server!";
     }
 }
