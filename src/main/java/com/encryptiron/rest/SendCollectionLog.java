@@ -158,7 +158,7 @@ public class SendCollectionLog extends PostCommand
             if (numClogsAccordingToVarp == -1)
             {
                 if (config.debug())
-                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Unable to send Colletion Log to Valiance, Relog and Open Clog", "ValianceClanPlugin");
+                    client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Unable to send Collection Log to Valiance, Relog and Open Clog", "ValianceClanPlugin");
                     
                 isClogOpen = false;
                 collectingClogData = false;
@@ -215,7 +215,7 @@ public class SendCollectionLog extends PostCommand
     }
 
     @Override
-    String onTextResponseMessage()
+    String onSuccessResponseMessage()
     {
         return "Sent Collection log progress to the Valiance server!";
     }

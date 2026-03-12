@@ -15,6 +15,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.PlayerChanged;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -52,6 +53,15 @@ public class ValianceClanPlugin extends Plugin
     @Inject
     private EventBus eventBus;
 
+    @Inject
+    private ClientThread clientThread;
+
+    @Provides
+    ValianceConfig getConfig(ConfigManager configManager)
+    {
+        return configManager.getConfig(ValianceConfig.class);
+    }
+
     @Override
     protected void startUp() throws Exception
     {
@@ -61,14 +71,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(newClogEntry);
         eventBus.register(onBossKilled);
 
-        if (client.getLocalPlayer() != null && client.getLocalPlayer().getName() != null)
-        {
-            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
-
-            // If the player has been logged in, then we will have missed the varp change events that
-            // happen during login. So we will manually scan and update our collection log count here.
-            sendCollectionLog.updateNumClogsAccordingToVarp();
-        }
+        tryLoadPlayer();
     }
 
     @Override
@@ -84,18 +87,12 @@ public class ValianceClanPlugin extends Plugin
         sendCollectionLog.resetNumClogsAccordingToVarp();
     }
 
-    @Provides
-    ValianceConfig getConfig(ConfigManager configManager)
-    {
-        return configManager.getConfig(ValianceConfig.class);
-    }
-
     @Subscribe
     public void onPlayerChanged(PlayerChanged playerChanged)
     {
         if (playerChanged.getPlayer().getId() == client.getLocalPlayer().getId())
         {
-            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+            tryLoadPlayer();
         }
     }
     
@@ -107,5 +104,23 @@ public class ValianceClanPlugin extends Plugin
 		{
             MessageHeaderData.resetPlayerName();
 		}
+    }
+    
+    private void tryLoadPlayer()
+    {
+        // Keep trying each tick until the client's name is populated.
+        clientThread.invokeLater(() -> {
+            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+            {
+                return false;
+            }
+
+            // If the player has been logged in, then we will have missed the varp change events that
+            // happen during login. So we will manually scan and update our collection log count here.
+            sendCollectionLog.updateNumClogsAccordingToVarp();
+            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+
+            return true;
+        });
     }
 }

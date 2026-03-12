@@ -36,6 +36,7 @@ public abstract class BaseRestCommand {
     private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
     private static final String MESSAGING_PROTOCOL = "http://";
     private static final int PORT = 8080;
+    protected static final String SERVER_SUCCESS_MESSAGE = "Success";
 
     @Inject
     private OkHttpClient httpClient;
@@ -143,7 +144,12 @@ public abstract class BaseRestCommand {
     abstract String endpoint();
     abstract JsonObject body();
     abstract String onRequestFailedMessage();
-    abstract String onTextResponseMessage();
+    // Server responds with OK and a successful response
+    abstract String onSuccessResponseMessage();
+    // Server responds with OK but something might be off, let the user know
+    private String onTextResponseMessage(String serverResponse) {
+        return "Valiance Server: " + serverResponse;
+    }
     
     public void onJsonResponse(Request request, JsonObject json)
     {
@@ -159,7 +165,14 @@ public abstract class BaseRestCommand {
         if (!config.debug())
             return;
 
-        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onTextResponseMessage(), "ValianceClanPlugin");
+        if (response.equals(SERVER_SUCCESS_MESSAGE))
+        {
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onSuccessResponseMessage(), "ValianceClanPlugin");
+        }
+        else
+        {
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onTextResponseMessage(response), "ValianceClanPlugin");
+        }
     }
 
     public void onFailCodeResponse(Request request, Response response)

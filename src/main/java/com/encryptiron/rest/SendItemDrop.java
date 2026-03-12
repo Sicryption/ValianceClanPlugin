@@ -93,7 +93,7 @@ public class SendItemDrop extends PostCommand
     }
     
     @Override
-    String onTextResponseMessage()
+    String onSuccessResponseMessage()
     {
         return "Sent item drop to the Valiance Server!";
     }
