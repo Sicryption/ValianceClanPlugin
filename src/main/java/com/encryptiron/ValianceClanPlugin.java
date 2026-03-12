@@ -56,22 +56,10 @@ public class ValianceClanPlugin extends Plugin
     @Inject
     private ClientThread clientThread;
 
-    private void tryLoadPlayer()
+    @Provides
+    ValianceConfig getConfig(ConfigManager configManager)
     {
-        // Keep trying each tick until the client's name is populated.
-        clientThread.invokeLater(() -> {
-            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
-            {
-                return false;
-            }
-
-            // If the player has been logged in, then we will have missed the varp change events that
-            // happen during login. So we will manually scan and update our collection log count here.
-            sendCollectionLog.updateNumClogsAccordingToVarp();
-            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
-
-            return true;
-        });
+        return configManager.getConfig(ValianceConfig.class);
     }
 
     @Override
@@ -116,5 +104,23 @@ public class ValianceClanPlugin extends Plugin
 		{
             MessageHeaderData.resetPlayerName();
 		}
+    }
+    
+    private void tryLoadPlayer()
+    {
+        // Keep trying each tick until the client's name is populated.
+        clientThread.invokeLater(() -> {
+            if (client.getLocalPlayer() == null || client.getLocalPlayer().getName() == null)
+            {
+                return false;
+            }
+
+            // If the player has been logged in, then we will have missed the varp change events that
+            // happen during login. So we will manually scan and update our collection log count here.
+            sendCollectionLog.updateNumClogsAccordingToVarp();
+            MessageHeaderData.setPlayerName(client.getLocalPlayer().getName());
+
+            return true;
+        });
     }
 }

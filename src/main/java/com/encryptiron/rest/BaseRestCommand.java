@@ -171,7 +171,7 @@ public abstract class BaseRestCommand {
         }
         else
         {
-            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onTextResponseMessage(response), "ValianceClanPlugin")
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onTextResponseMessage(response), "ValianceClanPlugin");
         }
     }
 
