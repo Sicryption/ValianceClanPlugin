@@ -93,7 +93,7 @@ public class NewCollectionLogEntry extends PostCommand
     }
 
     @Override
-    String onTextResponseMessage()
+    String onSuccessResponseMessage()
     {
         return "Sent the newly obtained collection log item to the Valiance server!";
     }

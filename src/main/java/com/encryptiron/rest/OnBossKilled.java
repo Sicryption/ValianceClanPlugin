@@ -166,7 +166,7 @@ public class OnBossKilled extends PostCommand
     }
 
     @Override
-    String onTextResponseMessage()
+    String onSuccessResponseMessage()
     {
         return "Sent Boss Killed message to the Valiance server!";
     }

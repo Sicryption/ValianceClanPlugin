@@ -157,7 +157,7 @@ public class SendCombatAchievements extends PostCommand
     }
 
     @Override
-    String onTextResponseMessage()
+    String onSuccessResponseMessage()
     {
         return "Sent Combat Achievement progress to the Valiance server!";
     }
