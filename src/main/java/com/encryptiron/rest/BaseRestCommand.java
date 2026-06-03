@@ -14,9 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
-import net.runelite.api.events.GameTick;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.config.RuneScapeProfileType;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -58,6 +57,8 @@ public abstract class BaseRestCommand {
             // on what the player has, after login / hop. We can skip sending this message as we don't care about it.
             return;
         }
+
+        MessageHeaderData.setProfileType(RuneScapeProfileType.getCurrent(client));
 
         URL url;
         try

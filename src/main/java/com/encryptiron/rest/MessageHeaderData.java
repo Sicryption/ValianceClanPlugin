@@ -4,19 +4,19 @@ import java.time.Instant;
 
 import com.google.gson.JsonObject;
 
+import lombok.Getter;
+import lombok.Setter;
+import net.runelite.client.config.RuneScapeProfileType;
+
 public final class MessageHeaderData 
 {
+    @Getter
+    @Setter
     private static String playerName = null;
-
-    public static String getPlayerName()
-    {
-        return MessageHeaderData.playerName;
-    }
-
-    public static void setPlayerName(String playerName)
-    {
-        MessageHeaderData.playerName = playerName;
-    }
+        
+    @Getter
+    @Setter
+    private static RuneScapeProfileType profileType = null;
 
     public static void resetPlayerName()
     {
@@ -28,6 +28,7 @@ public final class MessageHeaderData
         JsonObject headerData = new JsonObject();
         headerData.addProperty("player_name", getPlayerName());
         headerData.addProperty("time", Instant.now().toEpochMilli());
+        headerData.addProperty("profile_type", getProfileType().name());
         
         return headerData;
     }

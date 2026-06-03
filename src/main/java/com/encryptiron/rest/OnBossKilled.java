@@ -30,6 +30,7 @@ public class OnBossKilled extends PostCommand
         tempMap.put(VarPlayerID.TOTAL_ARAXXOR_KILLS, "Araxxor");
         tempMap.put(VarPlayerID.TOTAL_ARTIO_KILLS, "Artio");
         tempMap.put(VarPlayerID.TOTAL_BARROWS_CHESTS, "Barrows Chests");
+        tempMap.put(VarPlayerID.TOTAL_COWBOSS_KILLS, "Brutus");
         tempMap.put(VarPlayerID.TOTAL_BRYOPHYTA_KILLS, "Bryophyta");
         tempMap.put(VarPlayerID.TOTAL_CALLISTO_KILLS, "Callisto");
         tempMap.put(VarPlayerID.TOTAL_CALVARION_KILLS, "Calvar'ion");
@@ -91,6 +92,30 @@ public class OnBossKilled extends PostCommand
         tempMap.put(VarPlayerID.TOTAL_YAMA_KILLS, "Yama");
         tempMap.put(VarPlayerID.TOTAL_ZALCANO_KILLS, "Zalcano");
         tempMap.put(VarPlayerID.TOTAL_SNAKEBOSS_KILLS, "Zulrah");
+        tempMap.put(VarPlayerID.DOM_LEVEL_1_COMPLETIONS, "Doom of Mokhaiotl - W1");
+        tempMap.put(VarPlayerID.DOM_LEVEL_2_COMPLETIONS, "Doom of Mokhaiotl - W2");
+        tempMap.put(VarPlayerID.DOM_LEVEL_3_COMPLETIONS, "Doom of Mokhaiotl - W3");
+        tempMap.put(VarPlayerID.DOM_LEVEL_4_COMPLETIONS, "Doom of Mokhaiotl - W4");
+        tempMap.put(VarPlayerID.DOM_LEVEL_5_COMPLETIONS, "Doom of Mokhaiotl - W5");
+        tempMap.put(VarPlayerID.DOM_LEVEL_6_COMPLETIONS, "Doom of Mokhaiotl - W6");
+        tempMap.put(VarPlayerID.DOM_LEVEL_7_COMPLETIONS, "Doom of Mokhaiotl - W7");
+        tempMap.put(VarPlayerID.DOM_LEVEL_8_PLUS_COMPLETIONS, "Doom of Mokhaiotl");
+        tempMap.put(VarPlayerID.DOM_LEVEL_8_COMPLETIONS, "Doom of Mokhaiotl");
+        tempMap.put(VarPlayerID.TOTAL_DUKE_SUCELLUS_AWAKENED_KILLS, "Awakened Duke");
+        tempMap.put(VarPlayerID.TOTAL_LEVIATHAN_AWAKENED_KILLS, "Awakened Leviathan");
+        tempMap.put(VarPlayerID.TOTAL_VARDORVIS_AWAKENED_KILLS, "Awakened Vardorvis");
+        tempMap.put(VarPlayerID.TOTAL_WHISPERER_AWAKENED_KILLS, "Awakened Whisperer");
+        tempMap.put(VarPlayerID.TOTAL_GEMSTONE_CRAB_KILLS, "Gemstone Crab");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_1_COMPLETIONS, "Jad Challenge - 1");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_2_COMPLETIONS, "Jad Challenge - 2");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_3_COMPLETIONS, "Jad Challenge - 3");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_4_COMPLETIONS, "Jad Challenge - 4");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_5_COMPLETIONS, "Jad Challenge - 5");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_6_COMPLETIONS, "Jad Challenge - 6");
+        tempMap.put(VarPlayerID.JAD_CHALLENGE_LEAGUE_ONLY_COMPLETIONS, "Jad League Only Challenge");
+        tempMap.put(VarPlayerID.TOTAL_COLOSSEUM_WAVES_COMPLETED, "Colossseum Wave Total");
+        tempMap.put(VarPlayerID.TOTAL_COWBOSS_HARDMODE_KILLS, "Demonic Brutus");
+
 
         varpIdToBossName = tempMap;
     }
@@ -109,6 +134,14 @@ public class OnBossKilled extends PostCommand
     {
         JsonObject body = new JsonObject();
         body.addProperty("boss_killed", bossKilled);
+
+        if (bossKilled.equals("Doom of Mokhaiotl"))
+        {
+            int wave8Completions = client.getVarpValue(VarPlayerID.DOM_LEVEL_8_COMPLETIONS);
+            int wave8PlusCompletions = client.getVarpValue(VarPlayerID.DOM_LEVEL_8_PLUS_COMPLETIONS);
+            bossKillCount = wave8Completions + wave8PlusCompletions;
+        }
+
         body.addProperty("prev_kc", bossKillCount - 1);
 
         JsonObject highscoreObject = new JsonObject();
@@ -131,9 +164,6 @@ public class OnBossKilled extends PostCommand
     @Subscribe
     public void onVarbitChanged(VarbitChanged varbitChanged)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         // One of our boss values has changed. We want to inform the server
         // that we've killed this boss, and update all of our kill counts
         if (varpIdToBossName.containsKey(varbitChanged.getVarpId()))
@@ -168,6 +198,7 @@ public class OnBossKilled extends PostCommand
     @Override
     String onSuccessResponseMessage()
     {
+        log.info("Sent onBossKilled to server");
         return "Sent Boss Killed message to the Valiance server!";
     }
 

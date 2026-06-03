@@ -100,9 +100,6 @@ public class SendCombatAchievements extends PostCommand
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         if (caInterfaceIds.contains(widgetLoaded.getGroupId()))
         {
             if (openCaInterfaceIds.isEmpty())

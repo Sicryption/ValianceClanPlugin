@@ -81,9 +81,6 @@ public class SendCollectionLog extends PostCommand
     @Subscribe
     public void onVarbitChanged(VarbitChanged varbitChanged)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         if (varbitChanged.getVarpId() == VarPlayerID.COLLECTION_COUNT)
         {
             numClogsAccordingToVarp = client.getVarpValue(varbitChanged.getVarpId());
@@ -113,9 +110,6 @@ public class SendCollectionLog extends PostCommand
     @Subscribe
     public void onScriptPreFired(ScriptPreFired preFired)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         if (preFired.getScriptId() == 4100)
         {
             var args = preFired.getScriptEvent().getArguments();
@@ -131,9 +125,6 @@ public class SendCollectionLog extends PostCommand
     @Subscribe
     public void onGameTick(GameTick gameTick)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD || !isClogOpen)
-            return;
-
         // When searching, all clogs get fired through a script we can capture
         // We don't really know when it ends, it seems to always come 1 tick after a search start or end
         // So we will capture everything within a 3 tick window.
@@ -181,9 +172,6 @@ public class SendCollectionLog extends PostCommand
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         if (widgetLoaded.getGroupId() == InterfaceID.COLLECTION)
         {
             isClogOpen = true;
@@ -194,9 +182,6 @@ public class SendCollectionLog extends PostCommand
     @Subscribe
     public void onWidgetClosed(WidgetClosed widgetClosed)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         if (widgetClosed.getGroupId() == InterfaceID.COLLECTION)
         {
             isClogOpen = false;

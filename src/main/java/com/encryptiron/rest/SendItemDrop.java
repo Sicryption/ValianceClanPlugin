@@ -55,9 +55,6 @@ public class SendItemDrop extends PostCommand
     @Subscribe
     public void onLootReceived(final LootReceived event)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-
         npcName = event.getName();
         npcQuantity = event.getAmount();
         items = event.getItems();

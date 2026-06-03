@@ -49,9 +49,6 @@ public class NewCollectionLogEntry extends PostCommand
     @Subscribe
     public void onVarbitChanged(VarbitChanged varbitChanged)
     {
-        if (RuneScapeProfileType.getCurrent(client) != RuneScapeProfileType.STANDARD)
-            return;
-        
         // On log-in the game sends:
         // Varbit 4623 = 0
         // Varbit 4623 = <our last clog>
