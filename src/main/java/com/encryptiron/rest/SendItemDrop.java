@@ -2,16 +2,12 @@ package com.encryptiron.rest;
 
 import java.util.Collection;
 
-import javax.inject.Inject;
-
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
-import net.runelite.api.Client;
 import net.runelite.api.Varbits;
 import net.runelite.api.widgets.WidgetModalMode;
-import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.loottracker.LootReceived;
