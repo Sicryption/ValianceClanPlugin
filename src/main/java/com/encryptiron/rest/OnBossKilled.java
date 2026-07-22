@@ -111,7 +111,7 @@ public class OnBossKilled extends PostCommand
         tempMap.put(VarPlayerID.JAD_CHALLENGE_LEAGUE_ONLY_COMPLETIONS, "Jad League Only Challenge");
         tempMap.put(VarPlayerID.TOTAL_COLOSSEUM_WAVES_COMPLETED, "Colossseum Wave Total");
         tempMap.put(VarPlayerID.TOTAL_COWBOSS_HARDMODE_KILLS, "Demonic Brutus");
-        tempMap.put(5614, "Maggot King");
+        tempMap.put(VarPlayerID.TOTAL_MAGGOT_KING_KILLS, "Maggot King");
 
 
         varpIdToBossName = tempMap;
