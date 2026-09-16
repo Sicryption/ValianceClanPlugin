@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.Varbits;
+import net.runelite.api.widgets.WidgetModalMode;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.RuneScapeProfileType;
 import okhttp3.Call;
@@ -210,5 +212,25 @@ public abstract class BaseRestCommand {
             return;
 
         client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", onRequestFailedMessage(), "ValianceClanPlugin");
+    }
+
+    public void sendPopUp(String title, String description)
+    {
+        final int RESIZABLE_CLASSIC_LAYOUT = (161 << 16) | 13;
+        final int RESIZABLE_MODERN_LAYOUT = (164 << 16) | 13;
+        final int FIXED_CLASSIC_LAYOUT = 35913770;
+        final int componentId = client.isResized()
+                ? client.getVarbitValue(Varbits.SIDE_PANELS) == 1
+                ? RESIZABLE_MODERN_LAYOUT
+                : RESIZABLE_CLASSIC_LAYOUT
+                : FIXED_CLASSIC_LAYOUT;
+
+        client.openInterface(componentId, 660, WidgetModalMode.MODAL_CLICKTHROUGH);
+        client.runScript(3343, title, description, -1);
+    }
+
+    protected boolean isResponseType(JsonObject json, String type)
+    {
+        return json != null && json.has("type") && type.equals(json.get("type").getAsString());
     }
 }

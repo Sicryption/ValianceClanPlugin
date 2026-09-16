@@ -6,10 +6,12 @@ import java.util.Map;
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.eventbus.Subscribe;
+import okhttp3.Request;
 
 @Slf4j
 public class OnBossKilled extends PostCommand
@@ -207,6 +209,27 @@ public class OnBossKilled extends PostCommand
         {
             send();
             sendNextTick = false;
+        }
+    }
+
+    @Override
+    public void onJsonResponse(Request request, JsonObject json)
+    {
+        super.onJsonResponse(request, json);
+
+        if (isResponseType(json, "EventKcTileComplete"))
+        {
+            String eventName = json.get("eventName").getAsString();
+            String tile = json.get("tileDescription").getAsString()
+
+            String description = tile + " is complete.";
+
+            sendPopUp(eventName, description);
+
+            String eventChatMessage = "[<col=5555FF>" + eventName + "</col>] <col=ff0000>"
+                    + description + "</col>";
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", eventChatMessage, "ValianceClanPlugin");
+        
         }
     }
 }

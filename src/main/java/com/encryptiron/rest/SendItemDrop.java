@@ -6,8 +6,6 @@ import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
-import net.runelite.api.Varbits;
-import net.runelite.api.widgets.WidgetModalMode;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.loottracker.LootReceived;
@@ -63,7 +61,7 @@ public class SendItemDrop extends PostCommand
     {
         super.onJsonResponse(request, json);
 
-        if (json.get("type").getAsString().equals("EventItemAccepted"))
+        if (isResponseType(json, "EventItemAccepted"))
         {
             String eventName = json.get("eventName").getAsString();
             
@@ -95,20 +93,5 @@ public class SendItemDrop extends PostCommand
     String onRequestFailedMessage()
     {
         return "Failed to send item drop to the Valiance server.";
-    }
-
-    public void sendPopUp(String title, String description)
-    {
-        final int RESIZABLE_CLASSIC_LAYOUT = (161 << 16) | 13;
-        final int RESIZABLE_MODERN_LAYOUT = (164 << 16) | 13;
-        final int FIXED_CLASSIC_LAYOUT = 35913770;
-        final int componentId = client.isResized()
-                ? client.getVarbitValue(Varbits.SIDE_PANELS) == 1
-                ? RESIZABLE_MODERN_LAYOUT
-                : RESIZABLE_CLASSIC_LAYOUT
-                : FIXED_CLASSIC_LAYOUT;
-
-        client.openInterface(componentId, 660, WidgetModalMode.MODAL_CLICKTHROUGH);
-        client.runScript(3343, title, description, -1);
     }
 }
