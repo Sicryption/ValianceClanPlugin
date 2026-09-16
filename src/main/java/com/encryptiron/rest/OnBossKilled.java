@@ -220,7 +220,7 @@ public class OnBossKilled extends PostCommand
         if (isResponseType(json, "EventKcTileComplete"))
         {
             String eventName = json.get("eventName").getAsString();
-            String tile = json.get("tileDescription").getAsString()
+            String tile = json.get("tileDescription").getAsString();
 
             String description = tile + " is complete.";
 
