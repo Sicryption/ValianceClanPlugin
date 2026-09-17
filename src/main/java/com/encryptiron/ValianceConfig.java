@@ -41,10 +41,32 @@ public interface ValianceConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "sendDropScreenshots",
+        name = "Send Drop Screenshots",
+        description = "Sends a screenshot of the game as proof when an event accepts one of your drops. Only the game chat is captured - clan, friends, public and private chat are never included, and a screenshot for a drop no event wanted is discarded without being sent.",
+        position = 4
+    )
+    default boolean sendDropScreenshots()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+        keyName = "screenshotScale",
+        name = "Screenshot Scale (%)",
+        description = "Shrinks drop screenshots before sending them. 100 sends the game view at its own size.",
+        position = 5
+    )
+    default int screenshotScale()
+    {
+        return 100;
+    }
+
+    @ConfigItem(
         keyName = "valianceServerUrl",
         name = "Server URL",
         description = "URL to the Valiance Server (don't change).",
-        position = 4
+        position = 6
     )
     default String valianceServerUrl()
     {

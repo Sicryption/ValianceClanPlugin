@@ -8,6 +8,7 @@ import com.encryptiron.rest.OnBossKilled;
 import com.encryptiron.rest.SendCollectionLog;
 import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
+import com.encryptiron.screenshot.GameChatScreenshot;
 import com.google.inject.Provides;
 
 import lombok.extern.slf4j.Slf4j;
@@ -52,6 +53,9 @@ public class ValianceClanPlugin extends Plugin
     public OnBossKilled onBossKilled;
 
     @Inject
+    public GameChatScreenshot gameChatScreenshot;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -71,6 +75,10 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendItemDrop);
         eventBus.register(newClogEntry);
         eventBus.register(onBossKilled);
+        // Subscribes to the chatbox filter callback, the tick that puts the chat
+        // back if a frame never arrives, and the login state that invalidates
+        // anything still waiting.
+        eventBus.register(gameChatScreenshot);
 
         tryLoadPlayer();
     }
@@ -83,7 +91,12 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(sendItemDrop);
         eventBus.unregister(newClogEntry);
         eventBus.unregister(onBossKilled);
-        
+        eventBus.unregister(gameChatScreenshot);
+
+        // Drops anything still waiting on an answer, and puts the chat back if
+        // the plugin was turned off mid-capture.
+        gameChatScreenshot.reset();
+
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();
     }

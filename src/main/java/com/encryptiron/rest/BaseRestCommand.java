@@ -51,7 +51,7 @@ public abstract class BaseRestCommand {
     @Inject
     public ClientThread clientThread;
 
-    private void writeMessageToServer(JsonObject body)
+    private void writeMessageToServer(JsonObject body, String tag)
     {
         if (MessageHeaderData.getPlayerName() == null)
         {
@@ -77,11 +77,22 @@ public abstract class BaseRestCommand {
 
         RequestBody requestBody = RequestBody.create(APPLICATION_JSON, body.toString());
 
-        Request httpRequest = new Builder()
+        Builder requestBuilder = new Builder()
             .url(url)
             .header("User-Agent", "ValiancePlugin - " + MessageHeaderData.getPlayerName())
-            .post(requestBody)
-            .build();
+            .post(requestBody);
+
+        // Rides along on the request object and is never serialised, so nothing
+        // extra goes out on the wire. It is how a response callback works out
+        // which send it belongs to - the response handlers are all handed the
+        // Request, and the command objects themselves hold shared mutable state
+        // that the next message overwrites.
+        if (tag != null)
+        {
+            requestBuilder.tag(String.class, tag);
+        }
+
+        Request httpRequest = requestBuilder.build();
 
         httpClient.newCall(httpRequest).enqueue(new Callback() 
         {
@@ -131,13 +142,23 @@ public abstract class BaseRestCommand {
 
     public void send()
     {
+        send(null);
+    }
+
+    /**
+     * @param tag caller's own correlation key for this send, recoverable from
+     *            the response handlers with request.tag(String.class). Local to
+     *            the plugin - it is not sent to the server.
+     */
+    public void send(String tag)
+    {
         // Prepare the body outside of the thread, in case there are any delays
         JsonObject body = body();
         
         // We want to send the message in a separate thread so that we 
         // don't block the game client while waiting for the response
         Thread sendThread = new Thread(() -> {
-            writeMessageToServer(body);
+            writeMessageToServer(body, tag);
         });
 
         sendThread.start();
