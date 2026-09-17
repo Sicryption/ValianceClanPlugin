@@ -18,6 +18,14 @@ def runeLiteVersion = 'latest.release'
 dependencies {
 	compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
 
+	// Provided by the client at runtime - net.runelite:client depends on LWJGL at
+	// compile scope for its own GPU plugin, so the classes resolve from our
+	// classloader's parent. compileOnly, and the version is pinned to the one the
+	// client ships: bundling a second copy would be a different GL binding than
+	// the context we are reading from.
+	compileOnly 'org.lwjgl:lwjgl:3.3.2'
+	compileOnly 'org.lwjgl:lwjgl-opengl:3.3.2'
+
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'
 

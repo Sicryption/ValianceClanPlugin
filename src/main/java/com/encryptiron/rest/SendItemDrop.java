@@ -1,13 +1,16 @@
 package com.encryptiron.rest;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import javax.inject.Inject;
 
-import com.encryptiron.screenshot.GameChatScreenshot;
+import com.encryptiron.screenshot.DropScreenshot;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -27,7 +30,7 @@ public class SendItemDrop extends PostCommand
     private Integer npcQuantity;
 
     @Inject
-    private GameChatScreenshot screenshot;
+    private DropScreenshot screenshot;
 
     @Inject
     private SendDropScreenshot sendDropScreenshot;
@@ -133,11 +136,11 @@ public class SendItemDrop extends PostCommand
             return;
         }
 
-        byte[] png = screenshot.take(captureKey);
+        CompletableFuture<byte[]> png = screenshot.take(captureKey);
         if (png == null)
         {
-            // Nothing was captured - the tick already had a screenshot, the
-            // frame never arrived, or the player has the feature switched off.
+            // Nothing was ever captured for this drop - this tick already had a
+            // screenshot, or the player has the feature switched off.
             return;
         }
 
@@ -146,6 +149,9 @@ public class SendItemDrop extends PostCommand
             return;
         }
 
+        // Read the response now, on the thread that owns it, rather than inside
+        // the callback below.
+        List<Map.Entry<String, List<String>>> targets = new ArrayList<>();
         for (JsonElement element : json.getAsJsonArray("accepted"))
         {
             JsonObject accept = element.getAsJsonObject();
@@ -161,8 +167,26 @@ public class SendItemDrop extends PostCommand
                 submissionIds.add(id.getAsString());
             }
 
-            sendDropScreenshot.send(accept.get("event_id").getAsString(), submissionIds, png);
+            targets.add(new AbstractMap.SimpleEntry<>(
+                accept.get("event_id").getAsString(), submissionIds));
         }
+
+        // The encode is very likely still running: it started when the frame was
+        // drawn and the server has already answered. Wait for it rather than
+        // look now and find nothing - that is the whole reason this is a future.
+        png.thenAccept(bytes ->
+        {
+            if (bytes == null)
+            {
+                log.debug("No drop screenshot to send; the frame never arrived.");
+                return;
+            }
+
+            for (Map.Entry<String, List<String>> target : targets)
+            {
+                sendDropScreenshot.send(target.getKey(), target.getValue(), bytes);
+            }
+        });
     }
     
     @Override

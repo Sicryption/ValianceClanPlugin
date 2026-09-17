@@ -8,7 +8,9 @@ import com.encryptiron.rest.OnBossKilled;
 import com.encryptiron.rest.SendCollectionLog;
 import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
-import com.encryptiron.screenshot.GameChatScreenshot;
+import com.encryptiron.screenshot.CpuSceneGrabber;
+import com.encryptiron.screenshot.DropScreenshot;
+import com.encryptiron.screenshot.GpuSceneGrabber;
 import com.google.inject.Provides;
 
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +55,13 @@ public class ValianceClanPlugin extends Plugin
     public OnBossKilled onBossKilled;
 
     @Inject
-    public GameChatScreenshot gameChatScreenshot;
+    public DropScreenshot dropScreenshot;
+
+    @Inject
+    public GpuSceneGrabber gpuSceneGrabber;
+
+    @Inject
+    public CpuSceneGrabber cpuSceneGrabber;
 
     @Inject
     private EventBus eventBus;
@@ -75,10 +83,14 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendItemDrop);
         eventBus.register(newClogEntry);
         eventBus.register(onBossKilled);
-        // Subscribes to the chatbox filter callback, the tick that puts the chat
-        // back if a frame never arrives, and the login state that invalidates
-        // anything still waiting.
-        eventBus.register(gameChatScreenshot);
+        // Subscribes to the login state that invalidates anything still waiting.
+        eventBus.register(dropScreenshot);
+
+        // Both register regardless of which renderer is running: the client can
+        // be switched between them without restarting the plugin, and each one
+        // reports itself unavailable rather than being asked to guess at startup.
+        gpuSceneGrabber.startUp();
+        cpuSceneGrabber.startUp();
 
         tryLoadPlayer();
     }
@@ -91,11 +103,13 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(sendItemDrop);
         eventBus.unregister(newClogEntry);
         eventBus.unregister(onBossKilled);
-        eventBus.unregister(gameChatScreenshot);
+        eventBus.unregister(dropScreenshot);
 
-        // Drops anything still waiting on an answer, and puts the chat back if
-        // the plugin was turned off mid-capture.
-        gameChatScreenshot.reset();
+        gpuSceneGrabber.shutDown();
+        cpuSceneGrabber.shutDown();
+
+        // Drops anything still waiting on an answer from the server.
+        dropScreenshot.reset();
 
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();

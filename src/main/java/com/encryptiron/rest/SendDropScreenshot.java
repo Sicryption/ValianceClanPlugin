@@ -96,10 +96,22 @@ public class SendDropScreenshot
                     }
                     else
                     {
-                        // Nothing to retry against: the ids are single-use, so a
-                        // refusal means the server has already decided this
-                        // screenshot cannot be attached.
-                        log.debug("Drop screenshot refused with code " + closed.code());
+                        // Warn rather than debug, and carry the server's own
+                        // words. A refusal here is silent everywhere else - the
+                        // drop still counts, the player sees nothing wrong, and
+                        // the screenshot simply never appears on the site - so
+                        // this line is the only place the reason is ever stated.
+                        String reason = "";
+                        try
+                        {
+                            reason = closed.body() == null ? "" : closed.body().string();
+                        }
+                        catch (IOException ignored)
+                        {
+                            // The code alone is still worth reporting.
+                        }
+
+                        log.warn("Drop screenshot refused with code {}: {}", closed.code(), reason);
                     }
                 }
             }
