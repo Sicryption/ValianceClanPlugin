@@ -112,8 +112,31 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     @Getter
     private volatile int sampleAttempts = 0;
 
-    /** Only sample the binding while a capture is actually wanted. */
+    /**
+     * The last framebuffer binding actually observed, whatever it was.
+     *
+     * The number that matters. Zero attempts means the callback is not being
+     * reached at all; attempts with a binding of 0 means it is reached, but
+     * outside the window where the renderer has its scene buffer bound - two
+     * different problems with two different fixes.
+     */
+    @Getter
+    private volatile int lastObservedBinding = -1;
+
+    /**
+     * Only sample the binding while a capture is actually wanted.
+     *
+     * Bounded hard, because this is read from inside the renderer's per-entity
+     * callback: a glGetInteger there is a driver round trip on the hottest path
+     * in the client, and leaving it armed because a capture failed would cost
+     * frames for the rest of the session.
+     */
     private volatile boolean sampling = false;
+
+    /** Sampling stops after this many tries, successful or not. */
+    private static final int MAX_SAMPLES_PER_CAPTURE = 64;
+
+    private volatile int samplesThisCapture = 0;
 
     /** Our single-sample buffer, for resolving the multisampled scene into. */
     private int resolveFbo = 0;
@@ -154,7 +177,14 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     @Override
     public void arm()
     {
+        samplesThisCapture = 0;
         sampling = true;
+    }
+
+    /** Stops sampling whatever happened, called once the capture is over. */
+    private void disarm()
+    {
+        sampling = false;
     }
 
     /**
@@ -166,28 +196,70 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     @Override
     public boolean addEntity(Renderable renderable, boolean ui)
     {
-        if (sampling && !unavailable && !ui)
+        if (!ui)
         {
-            try
-            {
-                int bound = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
-                if (bound > 0)
-                {
-                    sceneFbo = bound;
-                    sampling = false;
-                }
-            }
-            catch (Throwable ex)
-            {
-                fail("could not read the current framebuffer binding", ex);
-            }
-            finally
-            {
-                sampleAttempts++;
-            }
+            sampleBinding();
         }
 
         return true;
+    }
+
+    @Override
+    public boolean drawObject(net.runelite.api.Scene scene, net.runelite.api.TileObject object)
+    {
+        sampleBinding();
+        return true;
+    }
+
+    @Override
+    public boolean drawTile(net.runelite.api.Scene scene, net.runelite.api.Tile tile)
+    {
+        // Deliberately not sampling here: drawTile runs on the map loader
+        // thread, which has no GL context, and a GL call from it is undefined
+        // rather than merely useless.
+        return true;
+    }
+
+    private void sampleBinding()
+    {
+        if (!sampling || unavailable)
+        {
+            return;
+        }
+
+        if (++samplesThisCapture > MAX_SAMPLES_PER_CAPTURE)
+        {
+            disarm();
+            return;
+        }
+
+        try
+        {
+            int bound = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
+            lastObservedBinding = bound;
+            if (bound > 0)
+            {
+                sceneFbo = bound;
+                disarm();
+            }
+        }
+        catch (Throwable ex)
+        {
+            fail("could not read the current framebuffer binding", ex);
+        }
+        finally
+        {
+            sampleAttempts++;
+        }
+    }
+
+    /** A capture attempt's story so far, for the in-game report. */
+    public String describe()
+    {
+        return String.format(
+            "gpu=%s, available=%s, samples=%d, lastBinding=%d, sceneFbo=%d%s",
+            client.isGpu(), isAvailable(), sampleAttempts, lastObservedBinding, sceneFbo,
+            lastFailure == null ? "" : ", failure=" + lastFailure);
     }
 
     /**
@@ -200,9 +272,13 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     @Override
     public BufferedImage grab()
     {
+        disarm();
+
         int fbo = sceneFbo;
         if (unavailable || fbo <= 0)
         {
+            lastFailure = "never saw the renderer's scene framebuffer bound ("
+                + sampleAttempts + " sample(s), last binding " + lastObservedBinding + ")";
             return null;
         }
 

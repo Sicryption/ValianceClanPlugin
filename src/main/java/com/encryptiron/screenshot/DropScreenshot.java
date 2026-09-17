@@ -18,8 +18,10 @@ import com.encryptiron.ValianceConfig;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.callback.ClientThread;
@@ -234,6 +236,53 @@ public class DropScreenshot
     {
         abandonPending();
         lastCaptureTick = -1;
+    }
+
+    /**
+     * <code>::valishot</code> - run a capture now and say what happened.
+     *
+     * The capture path fails silently by design and a dev client writes no log
+     * file, so without this the only way to test a change is to go and farm a
+     * drop that an event will actually accept. This does the same capture the
+     * drop path does and reports every stage into the chatbox.
+     */
+    @Subscribe
+    public void onCommandExecuted(CommandExecuted command)
+    {
+        if (!"valishot".equalsIgnoreCase(command.getCommand()))
+        {
+            return;
+        }
+
+        String key = "test-" + System.nanoTime();
+        lastCaptureTick = -1;
+        capture(key);
+
+        CompletableFuture<byte[]> shot = take(key);
+        if (shot == null)
+        {
+            report("capture did not start - " + status());
+            return;
+        }
+
+        shot.thenAccept(png -> clientThread.invokeLater(() ->
+            report(png == null
+                ? "no scene - " + status()
+                : String.format("captured %.0fKB - %s", png.length / 1024.0, status()))));
+    }
+
+    /** Everything known about the current renderer and the last attempt. */
+    private String status()
+    {
+        return String.format("gpu=%s | %s | cpuAvailable=%s",
+            client.isGpu(), gpuGrabber.describe(), cpuGrabber.isAvailable());
+    }
+
+    private void report(String message)
+    {
+        log.info("valishot: {}", message);
+        client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+            "<col=5555ff>valishot</col>: " + message, "ValianceClanPlugin");
     }
 
     @Subscribe
