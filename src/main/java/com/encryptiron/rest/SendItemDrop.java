@@ -178,7 +178,18 @@ public class SendItemDrop extends PostCommand
         {
             if (bytes == null)
             {
-                log.debug("No drop screenshot to send; the frame never arrived.");
+                String why = screenshot.getLastDiagnostic();
+                log.warn("No drop screenshot to send: {}", why == null ? "the frame never arrived" : why);
+
+                if (config.debug())
+                {
+                    // Straight into the chatbox, because the one thing we know
+                    // about this failure is that nobody is watching a log for it.
+                    clientThread.invokeLater(() -> client.addChatMessage(
+                        ChatMessageType.GAMEMESSAGE, "",
+                        "Valiance: no drop screenshot - " + (why == null ? "no frame arrived" : why),
+                        "ValianceClanPlugin"));
+                }
                 return;
             }
 

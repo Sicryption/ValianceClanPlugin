@@ -16,6 +16,7 @@ import javax.inject.Singleton;
 
 import com.encryptiron.ValianceConfig;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -96,6 +97,17 @@ public class DropScreenshot
     /** The last tick we captured on, so we capture at most once per tick. */
     private int lastCaptureTick = -1;
 
+    /**
+     * Why the last capture produced nothing, in words.
+     *
+     * This path fails silently by design - the drop still counts and the player
+     * sees nothing wrong - and a dev client writes no log file, so without this
+     * a failure is invisible from both ends. Surfaced in game under the debug
+     * option rather than only to a logger nobody is reading.
+     */
+    @Getter
+    private volatile String lastDiagnostic = null;
+
 
     /**
      * A screenshot that may not exist yet.
@@ -149,6 +161,12 @@ public class DropScreenshot
         {
             // No renderer we know how to read the scene from. Better no
             // screenshot than one with the interface in it.
+            lastDiagnostic = String.format(
+                "no scene source (gpu mode=%s, gpu grabber=%s, cpu grabber=%s%s)",
+                client.isGpu(),
+                gpuGrabber.isAvailable(),
+                cpuGrabber.isAvailable(),
+                gpuGrabber.getLastFailure() == null ? "" : "; gpu: " + gpuGrabber.getLastFailure());
             pending.remove(captureKey);
             slot.png.complete(null);
             return;
@@ -163,6 +181,19 @@ public class DropScreenshot
             // still reachable - for the GPU path, the only moment the GL context
             // is current at all.
             BufferedImage scene = source.grab();
+
+            if (scene == null)
+            {
+                lastDiagnostic = String.format(
+                    "%s read no scene (looked for the framebuffer %d time(s)%s)",
+                    source.getClass().getSimpleName(),
+                    gpuGrabber.getSampleAttempts(),
+                    gpuGrabber.getLastFailure() == null ? "" : "; " + gpuGrabber.getLastFailure());
+            }
+            else
+            {
+                lastDiagnostic = null;
+            }
 
             // Encoding is tens of milliseconds, which is a visible stutter if it
             // happens between game ticks, so that part does go elsewhere.

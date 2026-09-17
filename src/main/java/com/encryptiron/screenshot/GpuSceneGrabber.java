@@ -1,6 +1,12 @@
 package com.encryptiron.screenshot;
 
 import static org.lwjgl.opengl.GL33C.GL_COLOR_ATTACHMENT0;
+import static org.lwjgl.opengl.GL33C.GL_COLOR_BUFFER_BIT;
+import static org.lwjgl.opengl.GL33C.GL_DRAW_FRAMEBUFFER;
+import static org.lwjgl.opengl.GL33C.GL_FRAMEBUFFER;
+import static org.lwjgl.opengl.GL33C.GL_FRAMEBUFFER_COMPLETE;
+import static org.lwjgl.opengl.GL33C.GL_NEAREST;
+import static org.lwjgl.opengl.GL33C.GL_NO_ERROR;
 import static org.lwjgl.opengl.GL33C.GL_DRAW_FRAMEBUFFER_BINDING;
 import static org.lwjgl.opengl.GL33C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME;
 import static org.lwjgl.opengl.GL33C.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE;
@@ -18,6 +24,15 @@ import static org.lwjgl.opengl.GL33C.GL_TEXTURE_HEIGHT;
 import static org.lwjgl.opengl.GL33C.GL_TEXTURE_WIDTH;
 import static org.lwjgl.opengl.GL33C.GL_UNSIGNED_BYTE;
 import static org.lwjgl.opengl.GL33C.glBindFramebuffer;
+import static org.lwjgl.opengl.GL33C.glBlitFramebuffer;
+import static org.lwjgl.opengl.GL33C.glCheckFramebufferStatus;
+import static org.lwjgl.opengl.GL33C.glDeleteFramebuffers;
+import static org.lwjgl.opengl.GL33C.glDeleteRenderbuffers;
+import static org.lwjgl.opengl.GL33C.glFramebufferRenderbuffer;
+import static org.lwjgl.opengl.GL33C.glGenFramebuffers;
+import static org.lwjgl.opengl.GL33C.glGenRenderbuffers;
+import static org.lwjgl.opengl.GL33C.glGetError;
+import static org.lwjgl.opengl.GL33C.glRenderbufferStorage;
 import static org.lwjgl.opengl.GL33C.glBindRenderbuffer;
 import static org.lwjgl.opengl.GL33C.glBindTexture;
 import static org.lwjgl.opengl.GL33C.glGetFramebufferAttachmentParameteriv;
@@ -33,6 +48,7 @@ import java.nio.ByteBuffer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Renderable;
@@ -92,8 +108,27 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     /** Set when GL has failed once. Never cleared - one failure is enough. */
     private volatile boolean unavailable = false;
 
+    /** How many times we have looked for the scene framebuffer, for diagnostics. */
+    @Getter
+    private volatile int sampleAttempts = 0;
+
     /** Only sample the binding while a capture is actually wanted. */
     private volatile boolean sampling = false;
+
+    /** Our single-sample buffer, for resolving the multisampled scene into. */
+    private int resolveFbo = 0;
+    private int resolveRbo = 0;
+    private int resolveWidth = 0;
+    private int resolveHeight = 0;
+
+    /**
+     * Why the last attempt produced nothing.
+     *
+     * Kept so the player can be told, because the alternative is a feature that
+     * silently does nothing and a log file that dev clients do not write to.
+     */
+    @Getter
+    private volatile String lastFailure = null;
 
     public void startUp()
     {
@@ -103,6 +138,10 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
     public void shutDown()
     {
         renderCallbackManager.unregister(this);
+        // Deliberately not deleting the GL objects here: shutDown can run off
+        // the client thread, where there is no current context and the delete
+        // would be undefined behaviour rather than a leak. They go when the
+        // context does.
     }
 
     @Override
@@ -142,6 +181,10 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
             {
                 fail("could not read the current framebuffer binding", ex);
             }
+            finally
+            {
+                sampleAttempts++;
+            }
         }
 
         return true;
@@ -164,24 +207,52 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
         }
 
         int previousRead = 0;
+        int previousDraw = 0;
         try
         {
             previousRead = glGetInteger(GL_READ_FRAMEBUFFER_BINDING);
+            previousDraw = glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
+
             glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
 
             int[] size = attachmentSize();
             if (size == null)
             {
+                lastFailure = "the scene framebuffer has no readable colour attachment";
                 return null;
             }
 
             int width = size[0];
             int height = size[1];
 
+            // The scene is rendered into a multisampled renderbuffer whenever
+            // anti-aliasing is on, and glReadPixels on a multisampled attachment
+            // is an error rather than a slow path. Resolving through a blit into
+            // our own single-sample buffer is the supported way to read one, and
+            // it costs nothing when anti-aliasing is off.
+            if (!ensureResolveTarget(width, height))
+            {
+                return null;
+            }
+
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo);
+            glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+                GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, resolveFbo);
+
             ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
+            int error = glGetError();
+            if (error != GL_NO_ERROR)
+            {
+                lastFailure = "reading the scene failed with GL error 0x" + Integer.toHexString(error);
+                return null;
+            }
+
+            lastFailure = null;
             return toImage(pixels, width, height);
         }
         catch (Throwable ex)
@@ -194,14 +265,69 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
             try
             {
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, previousRead);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, previousDraw);
             }
             catch (Throwable ex)
             {
-                // Leaving the binding moved would corrupt the next frame, so a
+                // Leaving a binding moved would corrupt the next frame, so a
                 // failure here is the one worth shouting about.
-                fail("could not restore the previous framebuffer binding", ex);
+                fail("could not restore the previous framebuffer bindings", ex);
             }
         }
+    }
+
+    /**
+     * Our own single-sample buffer to resolve the scene into, sized to match.
+     *
+     * Kept between captures and rebuilt only when the scene size changes, so a
+     * drop does not cost an allocation of several megabytes of GPU memory on
+     * every kill.
+     */
+    private boolean ensureResolveTarget(int width, int height)
+    {
+        if (resolveFbo != 0 && width == resolveWidth && height == resolveHeight)
+        {
+            return true;
+        }
+
+        releaseResolveTarget();
+
+        resolveFbo = glGenFramebuffers();
+        resolveRbo = glGenRenderbuffers();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, resolveRbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, resolveRbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+        int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            lastFailure = "our resolve framebuffer is incomplete (status " + status + ")";
+            releaseResolveTarget();
+            return false;
+        }
+
+        resolveWidth = width;
+        resolveHeight = height;
+        return true;
+    }
+
+    private void releaseResolveTarget()
+    {
+        if (resolveFbo != 0)
+        {
+            glDeleteFramebuffers(resolveFbo);
+            resolveFbo = 0;
+        }
+        if (resolveRbo != 0)
+        {
+            glDeleteRenderbuffers(resolveRbo);
+            resolveRbo = 0;
+        }
+        resolveWidth = 0;
+        resolveHeight = 0;
     }
 
     /**
@@ -288,6 +414,7 @@ public class GpuSceneGrabber implements RenderCallback, SceneSource
         {
             unavailable = true;
             sampling = false;
+            lastFailure = what;
             log.warn("Drop screenshots disabled for this session - {}", what, ex);
         }
     }
