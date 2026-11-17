@@ -52,6 +52,9 @@ public class ValianceClanPlugin extends Plugin
     public OnBossKilled onBossKilled;
 
     @Inject
+    private PopUpQueue popUpQueue;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -71,6 +74,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendItemDrop);
         eventBus.register(newClogEntry);
         eventBus.register(onBossKilled);
+        eventBus.register(popUpQueue);
 
         tryLoadPlayer();
     }
@@ -83,7 +87,9 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(sendItemDrop);
         eventBus.unregister(newClogEntry);
         eventBus.unregister(onBossKilled);
-        
+        eventBus.unregister(popUpQueue);
+        clientThread.invoke(popUpQueue::clear);
+
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();
     }

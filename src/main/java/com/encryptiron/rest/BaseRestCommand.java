@@ -8,14 +8,13 @@ import java.net.URL;
 
 import javax.inject.Inject;
 
+import com.encryptiron.PopUpQueue;
 import com.encryptiron.ValianceConfig;
 
 import lombok.extern.slf4j.Slf4j;
 
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
-import net.runelite.api.gameval.VarbitID;
-import net.runelite.api.widgets.WidgetModalMode;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.RuneScapeProfileType;
 import okhttp3.Call;
@@ -28,6 +27,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -49,6 +49,9 @@ public abstract class BaseRestCommand {
 
     @Inject
     public ClientThread clientThread;
+
+    @Inject
+    private PopUpQueue popUpQueue;
 
     private void writeMessageToServer(JsonObject body)
     {
@@ -157,10 +160,32 @@ public abstract class BaseRestCommand {
     {
         log.info("Received json response: " + json.toString());
 
-        showServerPopUp(json);
-        showServerChatMessage(json);
+        showServerMessages(json);
 
         // The parent class should override this function if they want to do something with the response
+    }
+
+    private void showServerMessages(JsonObject json)
+    {
+        if (!json.has("messages") || !json.get("messages").isJsonArray())
+        {
+            showServerMessage(json);
+            return;
+        }
+
+        for (JsonElement message : json.getAsJsonArray("messages"))
+        {
+            if (message.isJsonObject())
+            {
+                showServerMessage(message.getAsJsonObject());
+            }
+        }
+    }
+
+    private void showServerMessage(JsonObject message)
+    {
+        showServerPopUp(message);
+        showServerChatMessage(message);
     }
 
     private void showServerPopUp(JsonObject json)
@@ -259,17 +284,7 @@ public abstract class BaseRestCommand {
 
     public void sendPopUp(String title, String description)
     {
-        final int RESIZABLE_CLASSIC_LAYOUT = (161 << 16) | 13;
-        final int RESIZABLE_MODERN_LAYOUT = (164 << 16) | 13;
-        final int FIXED_CLASSIC_LAYOUT = 35913770;
-        final int componentId = client.isResized()
-                ? client.getVarbitValue(VarbitID.RESIZABLE_STONE_ARRANGEMENT) == 1
-                ? RESIZABLE_MODERN_LAYOUT
-                : RESIZABLE_CLASSIC_LAYOUT
-                : FIXED_CLASSIC_LAYOUT;
-
-        client.openInterface(componentId, 660, WidgetModalMode.MODAL_CLICKTHROUGH);
-        client.runScript(3343, title, description, -1);
+        popUpQueue.add(title, description);
     }
 
     protected boolean isResponseType(JsonObject json, String type)
