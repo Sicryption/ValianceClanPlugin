@@ -63,7 +63,7 @@ public class SendItemDrop extends PostCommand
 
         if (config.debug())
         {
-            onTextResponse(request, null);
+            onTextResponse(request, SERVER_SUCCESS_MESSAGE);
         }
     }
     
