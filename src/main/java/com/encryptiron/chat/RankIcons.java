@@ -498,28 +498,6 @@ public class RankIcons
         return tags.toString();
     }
 
-    /**
-     * Whether a chat icon belongs in a Valiance name: one of the Valiance rank
-     * icons, or an account icon such as ironman. Anything else there is an
-     * in-game clan rank.
-     */
-    public boolean isKeptIcon(int index)
-    {
-        if (ACCOUNT_ICONS.contains(index))
-        {
-            return true;
-        }
-
-        for (RankIcon icon : icons.values())
-        {
-            if (chatIconManager.chatIconIndex(icon.iconId) == index)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** Goes up whenever the roster or icons change, so drawn ranks can be redrawn. */
     public int getRevision()
     {

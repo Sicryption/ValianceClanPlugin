@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.inject.Inject;
@@ -14,6 +13,7 @@ import com.encryptiron.ValianceConfig;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.EnumComposition;
 import net.runelite.api.ScriptID;
 import net.runelite.api.events.BeforeRender;
 import net.runelite.api.events.ChatMessage;
@@ -21,6 +21,9 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.Text;
@@ -28,14 +31,17 @@ import net.runelite.client.util.Text;
 /**
  * Takes the in-game clan ranks off what the game draws, once it has drawn it.
  *
- * The game adds a member's in-game rank icon to a clan chat line from its own
- * member list, outside the name RankIcons rewrites, and draws the clan tab's
- * member list with a rank graphic per row. Neither can be changed before it is
- * drawn, so both are corrected straight after:
- * - Valiance clan chat lines lose any icon in front of the name that is
- *   neither a Valiance rank nor an account icon such as ironman;
- * - the clan tab's rank graphics are hidden, and each name is given the
- *   member's Valiance rank icons instead.
+ * The game draws a member's in-game clan rank as its own graphic beside the
+ * name, both on clan chat lines and on each row of the clan tab's member list,
+ * so it cannot be removed from the name RankIcons rewrites. Instead, once the
+ * game has drawn:
+ * - on Valiance clan chat lines, the in-game rank graphic is hidden, leaving the
+ *   Valiance rank icons RankIcons put into the name;
+ * - in the clan tab, every in-game rank graphic is hidden, and each name is
+ *   widened into the space it leaves and given the member's Valiance icons.
+ *
+ * In-game rank graphics are recognised by their sprite: the game's enum of clan
+ * rank icons lists them all.
  */
 @Slf4j
 @Singleton
@@ -43,6 +49,10 @@ public class ClanRankWidgets
 {
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
     private static final String CHANNEL_PREFIX = "[" + ClanChatService.CLAN_NAME + "]";
+
+    // The game's enum from clan rank to the sprite drawn for it; RuneLite's
+    // ChatIconManager reads its clan rank icons from the same one.
+    private static final int CLAN_RANK_SPRITES_ENUM = 3798;
 
     // The script that builds each chat line, which RuneLite's chatMessageBuilding
     // callback runs inside. The chatbox as a whole is rebuilt by BUILD_CHATBOX.
@@ -62,11 +72,12 @@ public class ClanRankWidgets
     @Inject
     private ValianceConfig config;
 
+    private Set<Integer> clanRankSprites;
     // Set whenever the chat may have been rebuilt; the lines are cleaned once,
     // just before the next frame, rather than after every script.
     private boolean chatDirty;
     private int drawnRevision = -1;
-    // Lines already logged in debug, so a line is only logged once.
+    // Chat lines already logged in debug, so each is only logged once.
     private final Set<String> loggedLines = new HashSet<>();
 
     @Subscribe
@@ -97,7 +108,7 @@ public class ClanRankWidgets
             chatDirty = false;
             if (config.showValianceRanks())
             {
-                cleanChatLines();
+                hideChatRankGraphics();
             }
         }
     }
@@ -111,7 +122,7 @@ public class ClanRankWidgets
         }
 
         // A fallback for any rebuild the events above miss.
-        cleanChatLines();
+        hideChatRankGraphics();
 
         // The clan tab only redraws when the game says so, so a change in ranks
         // is drawn into it here.
@@ -122,60 +133,128 @@ public class ClanRankWidgets
         }
     }
 
-    private void cleanChatLines()
+    private boolean isClanRankGraphic(Widget widget)
     {
-        for (int id = InterfaceID.Chatbox.LINE0; id <= InterfaceID.Chatbox.LINE499; id++)
+        if (widget.getType() != WidgetType.GRAPHIC)
         {
-            Widget line = client.getWidget(id);
-            if (line == null || line.isHidden())
+            return false;
+        }
+
+        if (clanRankSprites == null)
+        {
+            EnumComposition sprites = client.getEnum(CLAN_RANK_SPRITES_ENUM);
+            clanRankSprites = new HashSet<>();
+            for (int sprite : sprites.getIntVals())
+            {
+                clanRankSprites.add(sprite);
+            }
+        }
+        return clanRankSprites.contains(widget.getSpriteId());
+    }
+
+    private void hideChatRankGraphics()
+    {
+        Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+        if (area == null)
+        {
+            return;
+        }
+
+        List<Widget> texts = new ArrayList<>();
+        List<Widget> rankGraphics = new ArrayList<>();
+        collect(area.getDynamicChildren(), texts, rankGraphics);
+        collect(area.getStaticChildren(), texts, rankGraphics);
+
+        if (config.debug() && rankGraphics.isEmpty() && loggedLines.add("summary"))
+        {
+            Set<Integer> graphicSprites = new HashSet<>();
+            for (Widget[] children : new Widget[][]{area.getDynamicChildren(), area.getStaticChildren(), area.getNestedChildren()})
+            {
+                for (Widget child : children == null ? new Widget[0] : children)
+                {
+                    if (child != null && child.getType() == WidgetType.GRAPHIC)
+                    {
+                        graphicSprites.add(child.getSpriteId());
+                    }
+                }
+            }
+            log.info("Valiance chat: no rank graphics found; {} dynamic, {} static, {} nested children; graphic sprites {}",
+                length(area.getDynamicChildren()), length(area.getStaticChildren()), length(area.getNestedChildren()), graphicSprites);
+        }
+
+        for (Widget graphic : rankGraphics)
+        {
+            Widget line = findLineText(graphic, texts);
+            if (config.debug())
+            {
+                String key = graphic.getSpriteId() + "|" + (line == null ? null : line.getText());
+                if (loggedLines.add(key))
+                {
+                    log.info("Valiance chat rank graphic: sprite {} at {},{} on line \"{}\"",
+                        graphic.getSpriteId(), graphic.getRelativeX(), graphic.getRelativeY(),
+                        line == null ? null : line.getText());
+                }
+            }
+
+            if (line != null && Text.removeTags(line.getText()).contains(CHANNEL_PREFIX))
+            {
+                graphic.setHidden(true);
+            }
+        }
+    }
+
+    private static int length(Widget[] children)
+    {
+        return children == null ? 0 : children.length;
+    }
+
+    private void collect(Widget[] children, List<Widget> texts, List<Widget> rankGraphics)
+    {
+        if (children == null)
+        {
+            return;
+        }
+
+        for (Widget child : children)
+        {
+            if (child == null || child.isHidden())
             {
                 continue;
             }
-
-            String text = line.getText();
-            if (text == null || !text.contains("<img="))
+            if (child.getType() == WidgetType.TEXT && child.getText() != null && !child.getText().isEmpty())
             {
-                continue;
+                texts.add(child);
             }
-
-            if (config.debug() && loggedLines.add(text))
+            else if (isClanRankGraphic(child))
             {
-                log.info("Valiance chat line {}: \"{}\"", id - InterfaceID.Chatbox.LINE0, text);
-            }
-
-            if (!Text.removeTags(text).contains(CHANNEL_PREFIX))
-            {
-                continue;
-            }
-
-            String cleaned = removeInGameRankIcons(text);
-            if (!cleaned.equals(text))
-            {
-                line.setText(cleaned);
+                rankGraphics.add(child);
             }
         }
     }
 
     /**
-     * The line without in-game rank icons. Only the part up to the name's colon
-     * is touched, so icons in the message itself (emoji and the like) stay.
+     * The text of the chat line a graphic sits on: the text whose row covers
+     * the middle of the graphic, preferring one that names the channel.
      */
-    private String removeInGameRankIcons(String text)
+    private static Widget findLineText(Widget graphic, List<Widget> texts)
     {
-        int prefixEnd = text.indexOf(']');
-        int nameEnd = prefixEnd < 0 ? -1 : text.indexOf(':', prefixEnd);
-        int end = nameEnd < 0 ? text.length() : nameEnd;
-
-        StringBuffer head = new StringBuffer();
-        Matcher tags = IMG_TAG.matcher(text.substring(0, end));
-        while (tags.find())
+        int middle = graphic.getRelativeY() + graphic.getHeight() / 2;
+        Widget found = null;
+        for (Widget text : texts)
         {
-            boolean keep = rankIcons.isKeptIcon(Integer.parseInt(tags.group(1)));
-            tags.appendReplacement(head, keep ? Matcher.quoteReplacement(tags.group()) : "");
+            if (middle >= text.getRelativeY() && middle < text.getRelativeY() + text.getHeight())
+            {
+                if (Text.removeTags(text.getText()).contains(CHANNEL_PREFIX))
+                {
+                    return text;
+                }
+                if (found == null)
+                {
+                    found = text;
+                }
+            }
         }
-        tags.appendTail(head);
-
-        return head + text.substring(end);
+        return found;
     }
 
     private void decoratePlayerLists()
@@ -193,82 +272,42 @@ public class ClanRankWidgets
 
     private void decoratePlayerList(Widget[] children)
     {
-        List<Widget> texts = new ArrayList<>();
-        List<Widget> graphics = new ArrayList<>();
         for (Widget child : children)
         {
             if (child == null)
             {
                 continue;
             }
-            if (child.getType() == WidgetType.TEXT)
+
+            if (isClanRankGraphic(child))
             {
-                texts.add(child);
+                child.setHidden(true);
             }
-            else if (child.getType() == WidgetType.GRAPHIC)
+            else if (child.getType() == WidgetType.TEXT
+                && child.getXTextAlignment() == WidgetTextAlignment.LEFT
+                && child.getText() != null && !child.getText().isEmpty())
             {
-                graphics.add(child);
+                decorateName(child);
             }
         }
+    }
 
-        if (texts.isEmpty())
+    private void decorateName(Widget name)
+    {
+        // Each name sits right-aligned in the row at the row's width less room
+        // for the rank graphic. With the graphic hidden it takes the full width,
+        // so the Valiance icons start where the graphic was.
+        if (name.getXPositionMode() == WidgetPositionMode.ABSOLUTE_RIGHT
+            && name.getWidthMode() == WidgetSizeMode.MINUS
+            && name.getOriginalWidth() != 0)
         {
-            return;
+            name.setOriginalWidth(0);
+            name.revalidate();
         }
 
-        if (config.debug())
-        {
-            for (Widget child : children)
-            {
-                if (child != null)
-                {
-                    log.info("Valiance clan list child: type {} at {},{} size {}x{} sprite {} hidden {} text \"{}\"",
-                        child.getType(), child.getOriginalX(), child.getOriginalY(),
-                        child.getOriginalWidth(), child.getOriginalHeight(),
-                        child.getSpriteId(), child.isHidden(), child.getText());
-                }
-            }
-        }
-
-        // Names are the leftmost column of text; the worlds sit to their right.
-        int nameX = Integer.MAX_VALUE;
-        for (Widget text : texts)
-        {
-            nameX = Math.min(nameX, text.getOriginalX());
-        }
-
-        // The rank graphics are the column left of the names. Once hidden, the
-        // names move into their place, widened by as much, so the Valiance icons
-        // in front of them fit. Already-hidden graphics mean this list was done
-        // before and only the icons need redrawing.
-        int graphicX = Integer.MAX_VALUE;
-        for (Widget graphic : graphics)
-        {
-            if (graphic.getOriginalX() < nameX && !graphic.isHidden())
-            {
-                graphicX = Math.min(graphicX, graphic.getOriginalX());
-                graphic.setHidden(true);
-            }
-        }
-
-        for (Widget text : texts)
-        {
-            if (text.getOriginalX() != nameX || text.getText() == null)
-            {
-                continue;
-            }
-
-            if (graphicX != Integer.MAX_VALUE)
-            {
-                text.setOriginalWidth(text.getOriginalWidth() + nameX - graphicX);
-                text.setOriginalX(graphicX);
-                text.revalidate();
-            }
-
-            // Icons from an earlier pass are taken off first, so redrawing never
-            // stacks them up.
-            String plainName = IMG_TAG.matcher(text.getText()).replaceAll("");
-            text.setText(rankIcons.rankIconTags(plainName) + plainName);
-        }
+        // Icons from an earlier pass are taken off first, so redrawing never
+        // stacks them up.
+        String plainName = IMG_TAG.matcher(name.getText()).replaceAll("");
+        name.setText(rankIcons.rankIconTags(plainName) + plainName);
     }
 }
