@@ -398,22 +398,37 @@ public class RankIcons
         Object[] objectStack = client.getObjectStack();
         int objectStackSize = client.getObjectStackSize();
         Object name = objectStack[objectStackSize - 3];
-        if (name instanceof String)
+        if (!(name instanceof String))
         {
-            objectStack[objectStackSize - 3] = rewriteName((String) name);
+            return;
         }
+
+        String rewritten = rewriteName((String) name);
+        if (config.debug())
+        {
+            log.info("Valiance rank icons: \"{}\" -> \"{}\" (node name \"{}\", sender \"{}\")",
+                name, rewritten, node.getName(), node.getSender());
+        }
+        objectStack[objectStackSize - 3] = rewritten;
     }
 
-    private static boolean isValianceClanChat(MessageNode node)
+    /**
+     * Whether the line was said in the Valiance clan channel. Decided by which
+     * channel the line's type belongs to, the same way the chat recorder does,
+     * rather than by the line's sender field.
+     */
+    private boolean isValianceClanChat(MessageNode node)
     {
         ChatMessageType type = node.getType();
-        if (type != ChatMessageType.CLAN_CHAT && type != ChatMessageType.CLAN_GUEST_CHAT)
+        if (type == ChatMessageType.CLAN_CHAT)
         {
-            return false;
+            return ClanChatService.isValiance(client.getClanChannel());
         }
-
-        String sender = node.getSender();
-        return sender != null && ClanChatService.CLAN_NAME.equalsIgnoreCase(Text.removeTags(sender).trim());
+        if (type == ChatMessageType.CLAN_GUEST_CHAT)
+        {
+            return ClanChatService.isValiance(client.getGuestClanChannel());
+        }
+        return false;
     }
 
     /** The name with its clan rank icons swapped for the member's Valiance ones. */
