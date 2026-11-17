@@ -33,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.IconID;
+import net.runelite.api.IndexedSprite;
 import net.runelite.api.MessageNode;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.ScriptCallbackEvent;
@@ -65,6 +66,8 @@ public class RankIcons
 
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
     private static final int NEAR_BLACK = 0x010101;
+    // Measured against the in-game rank graphic on the same chat line.
+    private static final int ICON_DROP = 2;
     private static final Pattern NAME_SPACING = Pattern.compile("[\\s_\\u00A0]+");
 
     // Icons the game shows in a name that say something about the account rather
@@ -406,6 +409,35 @@ public class RankIcons
             icon.frame = (icon.frame + 1) % icon.frames.size();
             icon.nextFrameAt = now + icon.delays.get(icon.frame);
             chatIconManager.updateChatIcon(icon.iconId, icon.frames.get(icon.frame));
+        }
+
+        lowerIcons();
+    }
+
+    /**
+     * Draws every rank icon ICON_DROP pixels lower than the game would.
+     *
+     * The game sits icons in text on the text's baseline, which leaves them
+     * higher than the in-game rank graphics they replace. The drop is set on
+     * the sprite itself, and set again whenever the sprite has been replaced:
+     * by an animation frame, or by RuneLite rebuilding the icons at log-in.
+     */
+    private void lowerIcons()
+    {
+        IndexedSprite[] modIcons = client.getModIcons();
+        if (modIcons == null)
+        {
+            return;
+        }
+
+        for (RankIcon icon : icons.values())
+        {
+            int index = chatIconManager.chatIconIndex(icon.iconId);
+            if (index >= 0 && index < modIcons.length && modIcons[index] != null
+                && modIcons[index].getOffsetY() != ICON_DROP)
+            {
+                modIcons[index].setOffsetY(ICON_DROP);
+            }
         }
     }
 

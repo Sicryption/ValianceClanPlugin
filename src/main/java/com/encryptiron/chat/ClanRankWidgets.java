@@ -199,8 +199,59 @@ public class ClanRankWidgets
             if (line != null && Text.removeTags(line.getText()).contains(CHANNEL_PREFIX))
             {
                 graphic.setHidden(true);
+                closeGap(graphic, texts);
             }
         }
+    }
+
+    /**
+     * Moves the rest of the line left into the space the hidden graphic took.
+     *
+     * The name starts where the graphic did, and the message moves with it.
+     * Worked out from where the name is now, so a line already moved is left
+     * alone, and one the game has redrawn is moved again.
+     */
+    private void closeGap(Widget graphic, List<Widget> texts)
+    {
+        List<Widget> rightOfGraphic = new ArrayList<>();
+        Widget name = null;
+        for (Widget text : texts)
+        {
+            if (isOnRow(graphic, text) && text.getRelativeX() > graphic.getRelativeX())
+            {
+                rightOfGraphic.add(text);
+                if (name == null || text.getRelativeX() < name.getRelativeX())
+                {
+                    name = text;
+                }
+            }
+        }
+
+        if (name == null)
+        {
+            return;
+        }
+
+        int shift = name.getRelativeX() - graphic.getRelativeX();
+        for (Widget text : rightOfGraphic)
+        {
+            if (text.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT)
+            {
+                if (config.debug())
+                {
+                    log.info("Valiance chat: not moving \"{}\", positioned by mode {}", text.getText(), text.getXPositionMode());
+                }
+                continue;
+            }
+            text.setOriginalX(text.getOriginalX() - shift);
+            text.revalidate();
+        }
+    }
+
+    private static boolean isOnRow(Widget graphic, Widget text)
+    {
+        int middle = graphic.getRelativeY() + graphic.getHeight() / 2;
+        return middle >= text.getRelativeY() && middle < text.getRelativeY() + text.getHeight();
     }
 
     private static int length(Widget[] children)
@@ -217,14 +268,16 @@ public class ClanRankWidgets
 
         for (Widget child : children)
         {
-            if (child == null || child.isHidden())
+            if (child == null)
             {
                 continue;
             }
-            if (child.getType() == WidgetType.TEXT && child.getText() != null && !child.getText().isEmpty())
+            if (child.getType() == WidgetType.TEXT && !child.isHidden() && child.getText() != null && !child.getText().isEmpty())
             {
                 texts.add(child);
             }
+            // Hidden ones too: one already hidden still marks where its line's
+            // gap is, should the game have moved the line back.
             else if (isClanRankGraphic(child))
             {
                 rankGraphics.add(child);
@@ -238,11 +291,10 @@ public class ClanRankWidgets
      */
     private static Widget findLineText(Widget graphic, List<Widget> texts)
     {
-        int middle = graphic.getRelativeY() + graphic.getHeight() / 2;
         Widget found = null;
         for (Widget text : texts)
         {
-            if (middle >= text.getRelativeY() && middle < text.getRelativeY() + text.getHeight())
+            if (isOnRow(graphic, text))
             {
                 if (Text.removeTags(text.getText()).contains(CHANNEL_PREFIX))
                 {
