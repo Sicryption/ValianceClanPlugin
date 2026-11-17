@@ -5,7 +5,6 @@ import java.util.Collection;
 import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ItemStack;
 import net.runelite.client.plugins.loottracker.LootReceived;
@@ -59,23 +58,8 @@ public class SendItemDrop extends PostCommand
     @Override
     public void onJsonResponse(Request request, JsonObject json)
     {
+        // The pop-up and chat message the server sends are shown by the base class
         super.onJsonResponse(request, json);
-
-        if (isResponseType(json, "EventItemAccepted"))
-        {
-            String eventName = json.get("eventName").getAsString();
-            
-            if (config.popupOnEventItemAccepted())
-            {
-                sendPopUp(eventName, "You submitted an item which progressed the event!");
-            }
-
-            if (config.chatMessageOnEventItemAccepted())
-            {
-                String eventChatMessage = "[<col=5555FF>" + eventName + "</col>] <col=ff0000>You submitted an item which progressed the event!</col>";
-                client.addChatMessage(ChatMessageType.GAMEMESSAGE, "ValianceCC", eventChatMessage, eventName);
-            }
-        }
 
         if (config.debug())
         {

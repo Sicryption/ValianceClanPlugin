@@ -156,8 +156,52 @@ public abstract class BaseRestCommand {
     public void onJsonResponse(Request request, JsonObject json)
     {
         log.info("Received json response: " + json.toString());
-        
+
+        showServerPopUp(json);
+        showServerChatMessage(json);
+
         // The parent class should override this function if they want to do something with the response
+    }
+
+    private void showServerPopUp(JsonObject json)
+    {
+        if (!config.popupOnEventItemAccepted() || !hasServerPopUp(json))
+        {
+            return;
+        }
+
+        JsonObject popUp = json.getAsJsonObject("popUp");
+        if (popUp.has("title") && popUp.has("description"))
+        {
+            sendPopUp(popUp.get("title").getAsString(), popUp.get("description").getAsString());
+        }
+    }
+
+    private boolean hasServerPopUp(JsonObject json)
+    {
+        return json != null && json.has("popUp") && json.get("popUp").isJsonObject();
+    }
+
+    private void showServerChatMessage(JsonObject json)
+    {
+        if (!config.chatMessageOnEventItemAccepted() || !hasServerChatMessage(json))
+        {
+            return;
+        }
+
+        JsonObject chatMessage = json.getAsJsonObject("chatMessage");
+        if (chatMessage.has("title") && chatMessage.has("message"))
+        {
+            String title = chatMessage.get("title").getAsString();
+            String eventChatMessage = "[<col=5555FF>" + title + "</col>] <col=ff0000>"
+                    + chatMessage.get("message").getAsString() + "</col>";
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "ValianceCC", eventChatMessage, title);
+        }
+    }
+
+    private boolean hasServerChatMessage(JsonObject json)
+    {
+        return json != null && json.has("chatMessage") && json.get("chatMessage").isJsonObject();
     }
 
     public void onTextResponse(Request request, String response)
