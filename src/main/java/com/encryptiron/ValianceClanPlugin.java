@@ -3,6 +3,7 @@ package com.encryptiron;
 import javax.inject.Inject;
 
 import com.encryptiron.chat.ClanChatService;
+import com.encryptiron.chat.ClanRankWidgets;
 import com.encryptiron.chat.EventDropBroadcasts;
 import com.encryptiron.chat.RankIcons;
 import com.encryptiron.rest.MessageHeaderData;
@@ -68,6 +69,9 @@ public class ValianceClanPlugin extends Plugin
     private RankIcons rankIcons;
 
     @Inject
+    private ClanRankWidgets clanRankWidgets;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -94,6 +98,7 @@ public class ValianceClanPlugin extends Plugin
         rankIcons.startUp();
         eventBus.register(clanChatService);
         eventBus.register(rankIcons);
+        eventBus.register(clanRankWidgets);
 
         tryLoadPlayer();
     }
@@ -111,6 +116,7 @@ public class ValianceClanPlugin extends Plugin
 
         eventBus.unregister(clanChatService);
         eventBus.unregister(rankIcons);
+        eventBus.unregister(clanRankWidgets);
         clanChatService.shutDown();
         // Puts the in-game ranks back on lines already in the chatbox.
         clientThread.invoke(client::refreshChat);

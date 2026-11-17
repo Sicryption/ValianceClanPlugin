@@ -64,6 +64,7 @@ public class RankIcons
     private static final File CACHE_FILE = new File(new File(RuneLite.RUNELITE_DIR, "valiance"), "ranks.json");
 
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
+    private static final int NEAR_BLACK = 0x010101;
     private static final Pattern NAME_SPACING = Pattern.compile("[\\s_\\u00A0]+");
 
     // Icons the game shows in a name that say something about the account rather
@@ -126,6 +127,7 @@ public class RankIcons
     private static final Map<String, Integer> ICON_IDS = new HashMap<>();
     private JsonObject savedRanks;
     private JsonObject savedIcons;
+    private int revision;
 
     // Read off the client thread when building the hello.
     private volatile String ranksVersion;
@@ -259,6 +261,7 @@ public class RankIcons
         members = next;
         savedRanks = body;
         ranksVersion = ValianceSocket.getString(body, "version");
+        revision++;
         save();
         client.refreshChat();
     }
@@ -282,6 +285,7 @@ public class RankIcons
                 installIcons(decoded);
                 savedIcons = body;
                 iconsVersion = ValianceSocket.getString(body, "version");
+                revision++;
                 save();
                 client.refreshChat();
             });
@@ -323,7 +327,7 @@ public class RankIcons
                     BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
                     if (image != null)
                     {
-                        result.frames.add(image);
+                        result.frames.add(keepBlackVisible(image));
                         result.delays.add(delayArray.get(i).getAsInt());
                     }
                 }
@@ -339,6 +343,32 @@ public class RankIcons
             }
         }
         return decoded;
+    }
+
+    /**
+     * The image with pure black made almost black.
+     *
+     * The game draws colour 0 in a chat icon as transparent, so the black
+     * outlines every rank icon has would otherwise vanish, leaving the icon
+     * looking nothing like the in-game one it copies.
+     */
+    private static BufferedImage keepBlackVisible(BufferedImage source)
+    {
+        BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < source.getHeight(); y++)
+        {
+            for (int x = 0; x < source.getWidth(); x++)
+            {
+                int argb = source.getRGB(x, y);
+                boolean opaque = (argb >>> 24) != 0;
+                if (opaque && (argb & 0xFFFFFF) == 0)
+                {
+                    argb |= NEAR_BLACK;
+                }
+                image.setRGB(x, y, argb);
+            }
+        }
+        return image;
     }
 
     private void installIcons(Map<String, DecodedIcon> decoded)
@@ -446,8 +476,14 @@ public class RankIcons
 
         String plainName = IMG_TAG.matcher(name).replaceAll("");
 
-        StringBuilder rankIcons = new StringBuilder();
-        List<String> ranks = members.get(normaliseName(Text.removeTags(plainName)));
+        return rankIconTags(plainName) + accountIcons + plainName;
+    }
+
+    /** The <img> tags for every Valiance rank the player shows, in order. Empty for anyone without one. */
+    public String rankIconTags(String name)
+    {
+        StringBuilder tags = new StringBuilder();
+        List<String> ranks = members.get(normaliseName(Text.removeTags(name)));
         if (ranks != null)
         {
             for (String rank : ranks)
@@ -455,12 +491,39 @@ public class RankIcons
                 RankIcon icon = icons.get(rank);
                 if (icon != null)
                 {
-                    rankIcons.append("<img=").append(chatIconManager.chatIconIndex(icon.iconId)).append('>');
+                    tags.append("<img=").append(chatIconManager.chatIconIndex(icon.iconId)).append('>');
                 }
             }
         }
+        return tags.toString();
+    }
 
-        return rankIcons.toString() + accountIcons + plainName;
+    /**
+     * Whether a chat icon belongs in a Valiance name: one of the Valiance rank
+     * icons, or an account icon such as ironman. Anything else there is an
+     * in-game clan rank.
+     */
+    public boolean isKeptIcon(int index)
+    {
+        if (ACCOUNT_ICONS.contains(index))
+        {
+            return true;
+        }
+
+        for (RankIcon icon : icons.values())
+        {
+            if (chatIconManager.chatIconIndex(icon.iconId) == index)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Goes up whenever the roster or icons change, so drawn ranks can be redrawn. */
+    public int getRevision()
+    {
+        return revision;
     }
 
     /** The same key the server builds the roster with. */
