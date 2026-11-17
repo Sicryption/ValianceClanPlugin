@@ -19,12 +19,14 @@ import net.runelite.api.ChatLineBuffer;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.IconID;
 import net.runelite.api.MessageNode;
 import net.runelite.api.Player;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.Text;
@@ -163,6 +165,8 @@ public class ClanChatService
         hello.addProperty("account_hash", Long.toString(client.getAccountHash()));
         hello.addProperty("rsn", Text.sanitize(localPlayer.getName()));
         hello.addProperty("profile_type", profileType.name());
+        // So this player's replayed messages carry their ironman icon.
+        hello.addProperty("account_type", client.getVarbitValue(VarbitID.IRONMAN));
 
         // So the welcome only carries the ranks and icons if they have changed
         // since they were saved.
@@ -298,6 +302,44 @@ public class ClanChatService
         }
     }
 
+    /**
+     * The icon the game shows beside an account's name, by the game's ironman
+     * setting, or nothing for a regular account or an unknown one.
+     */
+    private static String accountIconTag(JsonElement accountType)
+    {
+        if (accountType == null || !accountType.isJsonPrimitive())
+        {
+            return "";
+        }
+
+        IconID icon;
+        switch (accountType.getAsInt())
+        {
+            case 1:
+                icon = IconID.IRONMAN;
+                break;
+            case 2:
+                icon = IconID.ULTIMATE_IRONMAN;
+                break;
+            case 3:
+                icon = IconID.HARDCORE_IRONMAN;
+                break;
+            case 4:
+                icon = IconID.GROUP_IRONMAN;
+                break;
+            case 5:
+                icon = IconID.HARDCORE_GROUP_IRONMAN;
+                break;
+            case 6:
+                icon = IconID.UNRANKED_GROUP_IRONMAN;
+                break;
+            default:
+                return "";
+        }
+        return "<img=" + icon.getIndex() + ">";
+    }
+
     private void addHistoryMessage(ChatMessageType chatType, JsonObject entry)
     {
         String name = ValianceSocket.getString(entry, "rsn");
@@ -317,7 +359,11 @@ public class ClanChatService
             return;
         }
 
-        MessageNode node = client.addChatMessage(chatType, cleanName, cleanMessage, CLAN_NAME);
+        // The game puts the account's icon into the name of a live message, so
+        // a replayed one is given the same.
+        String nameWithIcon = accountIconTag(entry.get("account_type")) + cleanName;
+
+        MessageNode node = client.addChatMessage(chatType, nameWithIcon, cleanMessage, CLAN_NAME);
         if (node != null)
         {
             historyNodes.add(node);
