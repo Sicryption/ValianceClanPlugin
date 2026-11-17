@@ -2,6 +2,8 @@ package com.encryptiron.rest;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 
 import javax.inject.Inject;
@@ -9,12 +11,10 @@ import javax.inject.Inject;
 import com.encryptiron.ValianceConfig;
 
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
-import net.runelite.api.Varbits;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.WidgetModalMode;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.RuneScapeProfileType;
@@ -33,7 +33,6 @@ import com.google.gson.JsonParser;
 
 @Slf4j
 public abstract class BaseRestCommand {
-    private static final Logger log = LoggerFactory.getLogger(BaseRestCommand.class);
     private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
     private static final String MESSAGING_PROTOCOL = "http://";
     private static final int PORT = 8080;
@@ -65,8 +64,8 @@ public abstract class BaseRestCommand {
         URL url;
         try
         {
-            url = new URL(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint());
-        } catch (MalformedURLException e)
+            url = new URI(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint()).toURL();
+        } catch (MalformedURLException | URISyntaxException e)
         {
             log.error("MalformedURL : " + e.getMessage());
             return;
@@ -220,7 +219,7 @@ public abstract class BaseRestCommand {
         final int RESIZABLE_MODERN_LAYOUT = (164 << 16) | 13;
         final int FIXED_CLASSIC_LAYOUT = 35913770;
         final int componentId = client.isResized()
-                ? client.getVarbitValue(Varbits.SIDE_PANELS) == 1
+                ? client.getVarbitValue(VarbitID.RESIZABLE_STONE_ARRANGEMENT) == 1
                 ? RESIZABLE_MODERN_LAYOUT
                 : RESIZABLE_CLASSIC_LAYOUT
                 : FIXED_CLASSIC_LAYOUT;

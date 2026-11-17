@@ -114,8 +114,8 @@ public class OnBossKilled extends PostCommand
         tempMap.put(VarPlayerID.TOTAL_COLOSSEUM_WAVES_COMPLETED, "Colossseum Wave Total");
         tempMap.put(VarPlayerID.TOTAL_COWBOSS_HARDMODE_KILLS, "Demonic Brutus");
         tempMap.put(VarPlayerID.TOTAL_MAGGOT_KING_KILLS, "Maggot King");
-        tempMap.put(5712, "Mad Angel"); // Total Mad Angel Kills
-
+        tempMap.put(VarPlayerID.TOTAL_MAD_ANGEL_KILLS, "Mad Angel");
+        tempMap.put(VarPlayerID.TOTAL_COMPLETED_THEFRACTUREDARCHIVE, "The Fractured Archive");
 
         varpIdToBossName = tempMap;
     }
