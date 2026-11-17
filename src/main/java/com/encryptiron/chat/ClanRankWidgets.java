@@ -213,14 +213,25 @@ public class ClanRankWidgets
      */
     private void closeGap(Widget graphic, List<Widget> texts)
     {
-        List<Widget> rightOfGraphic = new ArrayList<>();
+        // Positions are compared as the game set them rather than as last laid
+        // out, since a move made here shows in the former straight away.
+        if (graphic.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT)
+        {
+            return;
+        }
+
+        // Everything from the graphic's position on, the name included once it
+        // has been moved there, so a line already closed is recognised as such.
+        List<Widget> rest = new ArrayList<>();
         Widget name = null;
         for (Widget text : texts)
         {
-            if (isOnRow(graphic, text) && text.getRelativeX() > graphic.getRelativeX())
+            if (isOnRow(graphic, text)
+                && text.getXPositionMode() == WidgetPositionMode.ABSOLUTE_LEFT
+                && text.getOriginalX() >= graphic.getOriginalX())
             {
-                rightOfGraphic.add(text);
-                if (name == null || text.getRelativeX() < name.getRelativeX())
+                rest.add(text);
+                if (name == null || text.getOriginalX() < name.getOriginalX())
                 {
                     name = text;
                 }
@@ -232,17 +243,14 @@ public class ClanRankWidgets
             return;
         }
 
-        int shift = name.getRelativeX() - graphic.getRelativeX();
-        for (Widget text : rightOfGraphic)
+        int shift = name.getOriginalX() - graphic.getOriginalX();
+        if (shift <= 0)
         {
-            if (text.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT)
-            {
-                if (config.debug())
-                {
-                    log.info("Valiance chat: not moving \"{}\", positioned by mode {}", text.getText(), text.getXPositionMode());
-                }
-                continue;
-            }
+            return;
+        }
+
+        for (Widget text : rest)
+        {
             text.setOriginalX(text.getOriginalX() - shift);
             text.revalidate();
         }
