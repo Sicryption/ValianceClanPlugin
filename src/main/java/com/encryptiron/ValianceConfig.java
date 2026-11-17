@@ -89,4 +89,16 @@ public interface ValianceConfig extends Config
     {
         return EventDropBroadcastFilter.ALL_TEAMS;
     }
+
+    @ConfigItem(
+        keyName = "showValianceRanks",
+        name = "Valiance ranks",
+        description = "Shows every Valiance rank a member holds beside their name in clan chat, in place of their in-game clan rank.",
+        position = 8,
+        section = clanChatSection
+    )
+    default boolean showValianceRanks()
+    {
+        return true;
+    }
 }

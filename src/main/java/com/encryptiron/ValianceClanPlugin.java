@@ -4,6 +4,7 @@ import javax.inject.Inject;
 
 import com.encryptiron.chat.ClanChatService;
 import com.encryptiron.chat.EventDropBroadcasts;
+import com.encryptiron.chat.RankIcons;
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
 import com.encryptiron.rest.OnBossKilled;
@@ -63,6 +64,9 @@ public class ValianceClanPlugin extends Plugin
     private EventDropBroadcasts eventDropBroadcasts;
 
     @Inject
+    private RankIcons rankIcons;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -86,7 +90,9 @@ public class ValianceClanPlugin extends Plugin
 
         clanChatService.startUp();
         eventDropBroadcasts.startUp();
+        rankIcons.startUp();
         eventBus.register(clanChatService);
+        eventBus.register(rankIcons);
 
         tryLoadPlayer();
     }
@@ -103,7 +109,10 @@ public class ValianceClanPlugin extends Plugin
         clientThread.invoke(popUpQueue::clear);
 
         eventBus.unregister(clanChatService);
+        eventBus.unregister(rankIcons);
         clanChatService.shutDown();
+        // Puts the in-game ranks back on lines already in the chatbox.
+        clientThread.invoke(client::refreshChat);
 
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();

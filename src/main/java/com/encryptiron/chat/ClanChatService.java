@@ -73,6 +73,9 @@ public class ClanChatService
     @Inject
     private ValianceConfig config;
 
+    @Inject
+    private RankIcons rankIcons;
+
     private int ticksOutsideClan;
     // History is shown once per log-in, not on every reconnect or world hop.
     private boolean historyRequested;
@@ -161,6 +164,17 @@ public class ClanChatService
         hello.addProperty("rsn", Text.sanitize(localPlayer.getName()));
         hello.addProperty("profile_type", profileType.name());
 
+        // So the welcome only carries the ranks and icons if they have changed
+        // since they were saved.
+        if (rankIcons.getRanksVersion() != null)
+        {
+            hello.addProperty("ranks_version", rankIcons.getRanksVersion());
+        }
+        if (rankIcons.getIconsVersion() != null)
+        {
+            hello.addProperty("icons_version", rankIcons.getIconsVersion());
+        }
+
         if (!historyRequested)
         {
             hello.addProperty("history", config.clanChatHistoryCount());
@@ -246,6 +260,9 @@ public class ClanChatService
 
     private void onWelcome(JsonObject welcome)
     {
+        // First, so the history below is drawn with up-to-date ranks.
+        rankIcons.onWelcome(welcome);
+
         JsonElement historyElement = welcome.get("history");
         if (historyElement == null || !historyElement.isJsonArray())
         {
