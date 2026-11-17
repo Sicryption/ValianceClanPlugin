@@ -2,6 +2,8 @@ package com.encryptiron;
 
 import javax.inject.Inject;
 
+import com.encryptiron.chat.ClanChatService;
+import com.encryptiron.chat.EventDropBroadcasts;
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
 import com.encryptiron.rest.OnBossKilled;
@@ -55,6 +57,12 @@ public class ValianceClanPlugin extends Plugin
     private PopUpQueue popUpQueue;
 
     @Inject
+    private ClanChatService clanChatService;
+
+    @Inject
+    private EventDropBroadcasts eventDropBroadcasts;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -76,6 +84,10 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(onBossKilled);
         eventBus.register(popUpQueue);
 
+        clanChatService.startUp();
+        eventDropBroadcasts.startUp();
+        eventBus.register(clanChatService);
+
         tryLoadPlayer();
     }
 
@@ -89,6 +101,9 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(onBossKilled);
         eventBus.unregister(popUpQueue);
         clientThread.invoke(popUpQueue::clear);
+
+        eventBus.unregister(clanChatService);
+        clanChatService.shutDown();
 
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();

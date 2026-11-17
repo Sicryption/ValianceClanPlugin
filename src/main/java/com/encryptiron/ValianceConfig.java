@@ -1,8 +1,12 @@
 package com.encryptiron;
 
+import com.encryptiron.chat.EventDropBroadcastFilter;
+
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 @ConfigGroup("encryptiron")
 public interface ValianceConfig extends Config
@@ -49,5 +53,40 @@ public interface ValianceConfig extends Config
     default String valianceServerUrl()
     {
         return "valianceosrs.com";
+    }
+
+    @ConfigSection(
+        name = "Clan Chat",
+        description = "Valiance clan chat, history and event broadcasts.",
+        position = 5
+    )
+    String clanChatSection = "clanChat";
+
+    @Range(
+        min = 0,
+        max = 100
+    )
+    @ConfigItem(
+        keyName = "clanChatHistoryCount",
+        name = "Messages on log-in",
+        description = "How many recent Valiance clan chat messages to show when you log in. 0 shows none.",
+        position = 6,
+        section = clanChatSection
+    )
+    default int clanChatHistoryCount()
+    {
+        return 10;
+    }
+
+    @ConfigItem(
+        keyName = "eventDropBroadcasts",
+        name = "Event drop broadcasts",
+        description = "Which teams' event drops are announced in clan chat.",
+        position = 7,
+        section = clanChatSection
+    )
+    default EventDropBroadcastFilter eventDropBroadcasts()
+    {
+        return EventDropBroadcastFilter.ALL_TEAMS;
     }
 }

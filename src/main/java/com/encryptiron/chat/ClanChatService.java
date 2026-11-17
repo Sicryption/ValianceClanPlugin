@@ -1,0 +1,310 @@
+package com.encryptiron.chat;
+
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.regex.Pattern;
+
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
+import com.encryptiron.ValianceConfig;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatLineBuffer;
+import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.MessageNode;
+import net.runelite.api.Player;
+import net.runelite.api.clan.ClanChannel;
+import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.client.config.RuneScapeProfileType;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.util.Text;
+
+/**
+ * The plugin's side of the Valiance clan chat.
+ *
+ * Holds the server connection open while the player is in the Valiance clan
+ * channel, as a member or as a guest. While it is open:
+ * - every clan chat message the player themselves sends is reported to the
+ *   server, which keeps the clan's chat log;
+ * - on log-in, the last few messages from the log are shown, so the chat has
+ *   some context before anything new is said.
+ *
+ * Only the player's own messages are reported. Everyone else's are reported by
+ * their own plugin, if they have one.
+ */
+@Slf4j
+@Singleton
+public class ClanChatService
+{
+    public static final String CLAN_NAME = "Valiance";
+
+    // How long the player can be out of the clan channel before the connection
+    // is closed. Covers the moments during log-in and world hops when the
+    // channel has not loaded yet, so those do not reconnect each time.
+    private static final int TICKS_BEFORE_DISCONNECT = 10;
+
+    // A message older than this when it reaches us was not just said: it is
+    // being replayed, such as by the Chat History plugin after a log-in.
+    private static final int MAX_MESSAGE_AGE_SECONDS = 10;
+
+    // The game escapes a typed angle bracket as <lt> or <gt>, so any other tag
+    // in a stored message did not come from the player typing it.
+    private static final Pattern NON_ESCAPE_TAG = Pattern.compile("<(?!lt>|gt>)[^>]*>");
+    private static final Pattern NON_NAME_CHARACTER = Pattern.compile("[^A-Za-z0-9 _-]");
+
+    private static final String HISTORY_END_MESSAGE = "<col=7f7f7f>End of recent clan chat</col>";
+
+    @Inject
+    private Client client;
+
+    @Inject
+    private ValianceSocket socket;
+
+    @Inject
+    private ValianceConfig config;
+
+    private int ticksOutsideClan;
+    // History is shown once per log-in, not on every reconnect or world hop.
+    private boolean historyRequested;
+    // Set while history is being added, so the messages it adds are not taken
+    // for the player speaking. The lines themselves are remembered too, in case
+    // their ChatMessage event arrives after addChatMessage has returned.
+    private boolean addingHistory;
+    private final Set<MessageNode> historyNodes = Collections.newSetFromMap(new WeakHashMap<>());
+
+    public void startUp()
+    {
+        socket.setHandler("welcome", this::onWelcome);
+    }
+
+    public void shutDown()
+    {
+        socket.stop();
+        ticksOutsideClan = 0;
+        historyRequested = false;
+    }
+
+    public static boolean isValiance(ClanChannel channel)
+    {
+        return channel != null && CLAN_NAME.equalsIgnoreCase(Text.removeTags(channel.getName()).trim());
+    }
+
+    /** The broadcast message type for whichever Valiance channel the player is in. */
+    public ChatMessageType broadcastType()
+    {
+        return isValiance(client.getClanChannel())
+            ? ChatMessageType.CLAN_MESSAGE
+            : ChatMessageType.CLAN_GUEST_MESSAGE;
+    }
+
+    private boolean isInValianceChannel()
+    {
+        return isValiance(client.getClanChannel()) || isValiance(client.getGuestClanChannel());
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+    {
+        if (event.getGameState() == GameState.LOGIN_SCREEN)
+        {
+            shutDown();
+        }
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick tick)
+    {
+        if (isInValianceChannel())
+        {
+            ticksOutsideClan = 0;
+            if (!socket.isRunning())
+            {
+                startSocket();
+            }
+        }
+        else if (socket.isRunning() && ++ticksOutsideClan >= TICKS_BEFORE_DISCONNECT)
+        {
+            socket.stop();
+        }
+    }
+
+    private void startSocket()
+    {
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer == null || localPlayer.getName() == null)
+        {
+            return;
+        }
+
+        // Clan chat is only tracked on the main game, the same as everything
+        // else the plugin sends.
+        RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
+        if (profileType != RuneScapeProfileType.STANDARD)
+        {
+            return;
+        }
+
+        JsonObject hello = new JsonObject();
+        hello.addProperty("type", "hello");
+        // As a string: a JSON number would round a 64-bit hash on the server.
+        hello.addProperty("account_hash", Long.toString(client.getAccountHash()));
+        hello.addProperty("rsn", Text.sanitize(localPlayer.getName()));
+        hello.addProperty("profile_type", profileType.name());
+
+        if (!historyRequested)
+        {
+            hello.addProperty("history", config.clanChatHistoryCount());
+            hello.addProperty("history_after", newestClanChatMillis());
+            historyRequested = true;
+        }
+
+        socket.start(hello);
+    }
+
+    /**
+     * When the newest clan chat line already in the chatbox was sent, in epoch
+     * ms, or 0 if there is none. History older than this is still on screen.
+     */
+    private long newestClanChatMillis()
+    {
+        long newestSeconds = 0;
+        for (ChatMessageType type : new ChatMessageType[]{ChatMessageType.CLAN_CHAT, ChatMessageType.CLAN_GUEST_CHAT})
+        {
+            ChatLineBuffer buffer = client.getChatLineMap().get(type.getType());
+            if (buffer == null)
+            {
+                continue;
+            }
+
+            for (MessageNode node : buffer.getLines())
+            {
+                if (node != null)
+                {
+                    newestSeconds = Math.max(newestSeconds, node.getTimestamp());
+                }
+            }
+        }
+
+        // Timestamps here are whole seconds, so everything within the newest
+        // one counts as already shown.
+        return newestSeconds == 0 ? 0 : newestSeconds * 1000 + 999;
+    }
+
+    @Subscribe
+    public void onChatMessage(ChatMessage event)
+    {
+        if (addingHistory || historyNodes.contains(event.getMessageNode()))
+        {
+            return;
+        }
+
+        ClanChannel channel;
+        if (event.getType() == ChatMessageType.CLAN_CHAT)
+        {
+            channel = client.getClanChannel();
+        }
+        else if (event.getType() == ChatMessageType.CLAN_GUEST_CHAT)
+        {
+            channel = client.getGuestClanChannel();
+        }
+        else
+        {
+            return;
+        }
+
+        Player localPlayer = client.getLocalPlayer();
+        if (!isValiance(channel) || localPlayer == null || localPlayer.getName() == null)
+        {
+            return;
+        }
+
+        if (!Text.sanitize(event.getName()).equalsIgnoreCase(Text.sanitize(localPlayer.getName())))
+        {
+            return;
+        }
+
+        if (Instant.now().getEpochSecond() - event.getTimestamp() > MAX_MESSAGE_AGE_SECONDS)
+        {
+            return;
+        }
+
+        JsonObject chat = new JsonObject();
+        chat.addProperty("type", "chat");
+        chat.addProperty("message", event.getMessage());
+        socket.send(chat);
+    }
+
+    private void onWelcome(JsonObject welcome)
+    {
+        JsonElement historyElement = welcome.get("history");
+        if (historyElement == null || !historyElement.isJsonArray())
+        {
+            return;
+        }
+
+        JsonArray history = historyElement.getAsJsonArray();
+        if (history.size() == 0 || !isInValianceChannel())
+        {
+            return;
+        }
+
+        ChatMessageType chatType = isValiance(client.getClanChannel())
+            ? ChatMessageType.CLAN_CHAT
+            : ChatMessageType.CLAN_GUEST_CHAT;
+
+        addingHistory = true;
+        try
+        {
+            for (JsonElement element : history)
+            {
+                if (element.isJsonObject())
+                {
+                    addHistoryMessage(chatType, element.getAsJsonObject());
+                }
+            }
+
+            client.addChatMessage(broadcastType(), "", HISTORY_END_MESSAGE, CLAN_NAME);
+        }
+        finally
+        {
+            addingHistory = false;
+        }
+    }
+
+    private void addHistoryMessage(ChatMessageType chatType, JsonObject entry)
+    {
+        String name = ValianceSocket.getString(entry, "rsn");
+        String message = ValianceSocket.getString(entry, "message");
+        JsonElement sentAt = entry.get("sent_at");
+        if (name == null || message == null || sentAt == null || !sentAt.isJsonPrimitive())
+        {
+            return;
+        }
+
+        // The server already strips these; stripped again because whatever is
+        // added here is drawn straight into the chatbox.
+        String cleanName = NON_NAME_CHARACTER.matcher(Text.removeTags(name)).replaceAll("");
+        String cleanMessage = NON_ESCAPE_TAG.matcher(message).replaceAll("");
+        if (cleanName.isEmpty() || cleanMessage.isEmpty())
+        {
+            return;
+        }
+
+        MessageNode node = client.addChatMessage(chatType, cleanName, cleanMessage, CLAN_NAME);
+        if (node != null)
+        {
+            historyNodes.add(node);
+            node.setTimestamp((int) (sentAt.getAsLong() / 1000));
+        }
+    }
+}
