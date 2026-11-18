@@ -17,15 +17,6 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetModalMode;
 import net.runelite.client.eventbus.Subscribe;
 
-/**
- * Shows pop-ups one after another, each once the one before has finished.
- *
- * The game leaves the notification interface open after a pop-up has played,
- * so whether it is open says nothing. What does change is the size of the
- * pop-up's box: it has a size while a pop-up is on screen and shrinks away when
- * it is done. A pop-up, ours or one the game shows itself, counts as finished
- * once the box has had no size for EMPTY_TICKS_BEFORE_NEXT ticks in a row.
- */
 @Singleton
 public class PopUpQueue
 {
@@ -34,10 +25,7 @@ public class PopUpQueue
     private static final int FIXED_CLASSIC_LAYOUT = 35913770;
     private static final int NOTIFICATION_DISPLAY_SCRIPT = 3343;
 
-    // So the moment between sliding out and the box being reset is not taken
-    // for the pop-up having finished.
     private static final int EMPTY_TICKS_BEFORE_NEXT = 2;
-    // A pop-up that has not appeared by then never will, and is not waited for.
     private static final int MAX_TICKS_TO_APPEAR = 5;
 
     private static final int[] POP_UP_BOXES = {
@@ -53,10 +41,7 @@ public class PopUpQueue
     }
 
     private final Queue<PopUp> pending = new ArrayDeque<>();
-    // Ticks in a row the pop-up box has had no size.
     private int emptyTicks = EMPTY_TICKS_BEFORE_NEXT;
-    // Set from starting a pop-up until it shows, so the empty box before it
-    // has grown is not taken for it having finished.
     private boolean waitingToAppear;
     private int ticksWaitedToAppear;
 
@@ -109,7 +94,6 @@ public class PopUpQueue
         }
     }
 
-    /** Whether a pop-up's box is showing and has a size. */
     private boolean isOnScreen()
     {
         for (int boxId : POP_UP_BOXES)
@@ -132,8 +116,6 @@ public class PopUpQueue
 
         PopUp popUp = pending.poll();
 
-        // Opened only if the game has not left it open from an earlier pop-up;
-        // the script plays the pop-up either way.
         if (client.getWidget(InterfaceID.NotificationDisplay.UNIVERSE) == null)
         {
             final int componentId = client.isResized()
