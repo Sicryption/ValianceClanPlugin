@@ -11,7 +11,7 @@
             "mainClass": "com.encryptiron.ValianceClanPluginTest",
             "projectName": "ValianceClanPlugin",
             "vmArgs": "-ea",
-            "args": "--developer-mode"
+            "args": "--developer-mode --debug"
         },
     ]
 }

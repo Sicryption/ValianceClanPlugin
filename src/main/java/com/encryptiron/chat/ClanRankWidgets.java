@@ -11,7 +11,6 @@ import javax.inject.Singleton;
 
 import com.encryptiron.ValianceConfig;
 
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.ScriptID;
@@ -43,7 +42,6 @@ import net.runelite.client.util.Text;
  * In-game rank graphics are recognised by their sprite: the game's enum of clan
  * rank icons lists them all.
  */
-@Slf4j
 @Singleton
 public class ClanRankWidgets
 {
@@ -77,8 +75,6 @@ public class ClanRankWidgets
     // just before the next frame, rather than after every script.
     private boolean chatDirty;
     private int drawnRevision = -1;
-    // Chat lines already logged in debug, so each is only logged once.
-    private final Set<String> loggedLines = new HashSet<>();
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired event)
@@ -165,37 +161,9 @@ public class ClanRankWidgets
         collect(area.getDynamicChildren(), texts, rankGraphics);
         collect(area.getStaticChildren(), texts, rankGraphics);
 
-        if (config.debug() && rankGraphics.isEmpty() && loggedLines.add("summary"))
-        {
-            Set<Integer> graphicSprites = new HashSet<>();
-            for (Widget[] children : new Widget[][]{area.getDynamicChildren(), area.getStaticChildren(), area.getNestedChildren()})
-            {
-                for (Widget child : children == null ? new Widget[0] : children)
-                {
-                    if (child != null && child.getType() == WidgetType.GRAPHIC)
-                    {
-                        graphicSprites.add(child.getSpriteId());
-                    }
-                }
-            }
-            log.info("Valiance chat: no rank graphics found; {} dynamic, {} static, {} nested children; graphic sprites {}",
-                length(area.getDynamicChildren()), length(area.getStaticChildren()), length(area.getNestedChildren()), graphicSprites);
-        }
-
         for (Widget graphic : rankGraphics)
         {
             Widget line = findLineText(graphic, texts);
-            if (config.debug())
-            {
-                String key = graphic.getSpriteId() + "|" + (line == null ? null : line.getText());
-                if (loggedLines.add(key))
-                {
-                    log.info("Valiance chat rank graphic: sprite {} at {},{} on line \"{}\"",
-                        graphic.getSpriteId(), graphic.getRelativeX(), graphic.getRelativeY(),
-                        line == null ? null : line.getText());
-                }
-            }
-
             if (line != null && Text.removeTags(line.getText()).contains(CHANNEL_PREFIX))
             {
                 graphic.setHidden(true);
@@ -260,11 +228,6 @@ public class ClanRankWidgets
     {
         int middle = graphic.getRelativeY() + graphic.getHeight() / 2;
         return middle >= text.getRelativeY() && middle < text.getRelativeY() + text.getHeight();
-    }
-
-    private static int length(Widget[] children)
-    {
-        return children == null ? 0 : children.length;
     }
 
     private void collect(Widget[] children, List<Widget> texts, List<Widget> rankGraphics)

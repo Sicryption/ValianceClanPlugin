@@ -250,7 +250,7 @@ public class ValianceSocket
 
         if (code >= FIRST_REFUSAL_CODE && code <= LAST_REFUSAL_CODE)
         {
-            log.debug("The Valiance server refused the connection ({})", code);
+            log.warn("The Valiance server refused the connection ({})", code);
             hello = null;
             queued.clear();
             return;

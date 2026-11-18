@@ -183,7 +183,7 @@ public class RankIcons
         }
         catch (IOException | JsonParseException ex)
         {
-            log.debug("Could not read the saved Valiance ranks", ex);
+            log.warn("Could not read the saved Valiance ranks", ex);
             return;
         }
 
@@ -229,7 +229,7 @@ public class RankIcons
             }
             catch (IOException ex)
             {
-                log.debug("Could not save the Valiance ranks", ex);
+                log.warn("Could not save the Valiance ranks", ex);
             }
         });
     }
@@ -336,7 +336,7 @@ public class RankIcons
                 }
                 catch (IOException | IllegalArgumentException | IllegalStateException | UnsupportedOperationException ex)
                 {
-                    log.debug("Skipping an unreadable frame of the {} rank icon", entry.getKey(), ex);
+                    log.warn("Skipping an unreadable frame of the {} rank icon", entry.getKey(), ex);
                 }
             }
 
@@ -465,13 +465,7 @@ public class RankIcons
             return;
         }
 
-        String rewritten = rewriteName((String) name);
-        if (config.debug())
-        {
-            log.info("Valiance rank icons: \"{}\" -> \"{}\" (node name \"{}\", sender \"{}\")",
-                name, rewritten, node.getName(), node.getSender());
-        }
-        objectStack[objectStackSize - 3] = rewritten;
+        objectStack[objectStackSize - 3] = rewriteName((String) name);
     }
 
     /**
