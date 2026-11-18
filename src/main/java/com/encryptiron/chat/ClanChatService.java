@@ -2,13 +2,10 @@ package com.encryptiron.chat;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.regex.Pattern;
 
 import javax.inject.Inject;
@@ -44,6 +41,8 @@ public class ClanChatService
 
     private static final int TICKS_OUTSIDE_CLAN_BEFORE_DISCONNECT = 10;
 
+    private static final int TICKS_BETWEEN_CONNECT_ATTEMPTS = 10;
+
     private static final int MAX_REPORTED_MESSAGE_AGE_SECONDS = 10;
 
     private static final Pattern NON_ESCAPE_TAG = Pattern.compile("<(?!lt>|gt>)[^>]*>");
@@ -66,9 +65,9 @@ public class ClanChatService
     private RankIcons rankIcons;
 
     private int ticksOutsideClan;
+    private int ticksUntilConnectAttempt;
     private boolean historyRequestedThisLogin;
-    private boolean addingOwnLines;
-    private final Set<MessageNode> ownLineNodes = Collections.newSetFromMap(new WeakHashMap<>());
+    private boolean addingServerLines;
 
     public void startUp()
     {
@@ -80,6 +79,7 @@ public class ClanChatService
     {
         socket.stop();
         ticksOutsideClan = 0;
+        ticksUntilConnectAttempt = 0;
         historyRequestedThisLogin = false;
     }
 
@@ -115,7 +115,7 @@ public class ClanChatService
         if (isInValianceChannel())
         {
             ticksOutsideClan = 0;
-            if (!socket.isRunning())
+            if (!socket.isRunning() && --ticksUntilConnectAttempt <= 0)
             {
                 startSocket();
             }
@@ -140,36 +140,38 @@ public class ClanChatService
             return;
         }
 
-        JsonObject hello = new JsonObject();
-        hello.addProperty("type", "hello");
-        hello.addProperty("account_hash", Long.toString(client.getAccountHash()));
-        hello.addProperty("rsn", Text.sanitize(localPlayer.getName()));
-        hello.addProperty("profile_type", profileType.name());
-        hello.addProperty("account_type", client.getVarbitValue(VarbitID.IRONMAN));
+        JsonObject handshake = new JsonObject();
+        handshake.addProperty("type", "hello");
+        handshake.addProperty("account_hash", Long.toString(client.getAccountHash()));
+        handshake.addProperty("rsn", Text.sanitize(localPlayer.getName()));
+        handshake.addProperty("profile_type", profileType.name());
+        handshake.addProperty("account_type", client.getVarbitValue(VarbitID.IRONMAN));
 
         if (rankIcons.getRanksVersion() != null)
         {
-            hello.addProperty("ranks_version", rankIcons.getRanksVersion());
+            handshake.addProperty("ranks_version", rankIcons.getRanksVersion());
         }
         if (rankIcons.getIconsVersion() != null)
         {
-            hello.addProperty("icons_version", rankIcons.getIconsVersion());
+            handshake.addProperty("icons_version", rankIcons.getIconsVersion());
         }
 
         if (!historyRequestedThisLogin)
         {
-            hello.addProperty("history", config.clanChatHistoryCount());
+            handshake.addProperty("history", config.clanChatHistoryCount());
             historyRequestedThisLogin = true;
         }
 
-        socket.start(hello);
+        ticksUntilConnectAttempt = TICKS_BETWEEN_CONNECT_ATTEMPTS;
+        socket.start(handshake);
     }
 
-    private Map<String, List<Integer>> chatboxLineTimesByKey()
+    private Map<String, List<Integer>> chatboxLineTimesByKey(ChatMessageType... types)
     {
         Map<String, List<Integer>> lines = new HashMap<>();
-        for (ChatLineBuffer buffer : client.getChatLineMap().values())
+        for (ChatMessageType type : types)
         {
+            ChatLineBuffer buffer = client.getChatLineMap().get(type.getType());
             if (buffer == null)
             {
                 continue;
@@ -216,7 +218,7 @@ public class ClanChatService
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        if (addingOwnLines || ownLineNodes.contains(event.getMessageNode()))
+        if (addingServerLines)
         {
             return;
         }
@@ -277,10 +279,11 @@ public class ClanChatService
             ? ChatMessageType.CLAN_CHAT
             : ChatMessageType.CLAN_GUEST_CHAT;
 
-        Map<String, List<Integer>> chatbox = chatboxLineTimesByKey();
+        ChatMessageType serverLineType = broadcastType();
+        Map<String, List<Integer>> chatbox = chatboxLineTimesByKey(chatType, serverLineType);
         boolean added = false;
 
-        addingOwnLines = true;
+        addingServerLines = true;
         try
         {
             for (JsonElement element : history)
@@ -303,7 +306,7 @@ public class ClanChatService
 
                 if (serverLine)
                 {
-                    addServerLine(entry);
+                    addServerLine(serverLineType, entry);
                 }
                 else
                 {
@@ -314,29 +317,29 @@ public class ClanChatService
 
             if (added)
             {
-                client.addChatMessage(broadcastType(), "", HISTORY_END_MESSAGE, CLAN_NAME);
+                client.addChatMessage(serverLineType, "", HISTORY_END_MESSAGE, CLAN_NAME);
             }
         }
         finally
         {
-            addingOwnLines = false;
+            addingServerLines = false;
         }
     }
 
     private void onServerLine(JsonObject line)
     {
-        addingOwnLines = true;
+        addingServerLines = true;
         try
         {
-            addServerLine(line);
+            addServerLine(broadcastType(), line);
         }
         finally
         {
-            addingOwnLines = false;
+            addingServerLines = false;
         }
     }
 
-    private void addServerLine(JsonObject line)
+    private void addServerLine(ChatMessageType type, JsonObject line)
     {
         String message = ValianceSocket.getString(line, "message");
         if (message == null)
@@ -344,13 +347,11 @@ public class ClanChatService
             return;
         }
 
-        MessageNode node = client.addChatMessage(broadcastType(), "", message, CLAN_NAME);
+        MessageNode node = client.addChatMessage(type, "", message, CLAN_NAME);
         if (node == null)
         {
             return;
         }
-
-        ownLineNodes.add(node);
 
         JsonElement sentAt = line.get("sent_at");
         if (sentAt != null && sentAt.isJsonPrimitive())
@@ -415,7 +416,6 @@ public class ClanChatService
         MessageNode node = client.addChatMessage(chatType, nameWithIcon, cleanMessage, CLAN_NAME);
         if (node != null)
         {
-            ownLineNodes.add(node);
             node.setTimestamp((int) (sentAt.getAsLong() / 1000));
         }
     }

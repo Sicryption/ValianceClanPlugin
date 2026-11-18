@@ -41,6 +41,7 @@ import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ChatIconManager;
+import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 
 @Slf4j
@@ -91,12 +92,12 @@ public class RankIcons
     private static class RankIcon
     {
         final int iconId;
-        final List<BufferedImage> frames;
+        final List<IndexedSprite> frames;
         final List<Integer> delays;
         int frame;
         long nextFrameAt;
 
-        RankIcon(int iconId, List<BufferedImage> frames, List<Integer> delays)
+        RankIcon(int iconId, List<IndexedSprite> frames, List<Integer> delays)
         {
             this.iconId = iconId;
             this.frames = frames;
@@ -107,9 +108,10 @@ public class RankIcons
     private Map<String, List<String>> members = Collections.emptyMap();
     private final Map<String, RankIcon> icons = new HashMap<>();
     private static final Map<String, Integer> CHAT_ICON_ID_BY_RANK = new HashMap<>();
-    private JsonObject savedRanks;
-    private JsonObject savedIcons;
-    private int revision;
+    private JsonObject ranksJson;
+    private JsonObject iconsJson;
+    private int ranksRevision;
+    private int iconsGeneration;
     private boolean iconSpritesWereMissing;
 
     private volatile String ranksVersion;
@@ -117,8 +119,8 @@ public class RankIcons
 
     public void startUp()
     {
-        socket.setHandler("ranks", this::applyRanks);
-        socket.setHandler("icons", this::applyIcons);
+        socket.setHandler("ranks", body -> applyRanks(body, true));
+        socket.setHandler("icons", body -> applyIcons(body, true));
         executor.execute(this::loadSaved);
     }
 
@@ -137,13 +139,13 @@ public class RankIcons
         JsonElement ranks = welcome.get("ranks");
         if (ranks != null && ranks.isJsonObject())
         {
-            applyRanks(ranks.getAsJsonObject());
+            applyRanks(ranks.getAsJsonObject(), true);
         }
 
         JsonElement iconsElement = welcome.get("icons");
         if (iconsElement != null && iconsElement.isJsonObject())
         {
-            applyIcons(iconsElement.getAsJsonObject());
+            applyIcons(iconsElement.getAsJsonObject(), true);
         }
     }
 
@@ -172,13 +174,13 @@ public class RankIcons
 
         clientThread.invokeLater(() ->
         {
-            if (savedRanks == null && saved.has("ranks") && saved.get("ranks").isJsonObject())
+            if (ranksJson == null && saved.has("ranks") && saved.get("ranks").isJsonObject())
             {
-                applyRanks(saved.getAsJsonObject("ranks"));
+                applyRanks(saved.getAsJsonObject("ranks"), false);
             }
-            if (savedIcons == null && saved.has("icons") && saved.get("icons").isJsonObject())
+            if (iconsGeneration == 0 && saved.has("icons") && saved.get("icons").isJsonObject())
             {
-                applyIcons(saved.getAsJsonObject("icons"));
+                applyIcons(saved.getAsJsonObject("icons"), false);
             }
         });
     }
@@ -186,13 +188,13 @@ public class RankIcons
     private void save()
     {
         JsonObject saved = new JsonObject();
-        if (savedRanks != null)
+        if (ranksJson != null)
         {
-            saved.add("ranks", savedRanks);
+            saved.add("ranks", ranksJson);
         }
-        if (savedIcons != null)
+        if (iconsJson != null)
         {
-            saved.add("icons", savedIcons);
+            saved.add("icons", iconsJson);
         }
 
         String json = gson.toJson(saved);
@@ -210,7 +212,7 @@ public class RankIcons
         });
     }
 
-    private void applyRanks(JsonObject body)
+    private void applyRanks(JsonObject body, boolean fromServer)
     {
         JsonElement membersElement = body.get("members");
         if (membersElement == null || !membersElement.isJsonObject())
@@ -238,14 +240,17 @@ public class RankIcons
         }
 
         members = next;
-        savedRanks = body;
+        ranksJson = body;
         ranksVersion = ValianceSocket.getString(body, "version");
-        revision++;
-        save();
+        ranksRevision++;
+        if (fromServer)
+        {
+            save();
+        }
         client.refreshChat();
     }
 
-    private void applyIcons(JsonObject body)
+    private void applyIcons(JsonObject body, boolean fromServer)
     {
         JsonElement iconsElement = body.get("icons");
         if (iconsElement == null || !iconsElement.isJsonObject())
@@ -253,17 +258,26 @@ public class RankIcons
             return;
         }
 
-        JsonObject iconsJson = iconsElement.getAsJsonObject();
+        JsonObject iconsByRank = iconsElement.getAsJsonObject();
+        int generation = ++iconsGeneration;
         executor.execute(() ->
         {
-            Map<String, DecodedIcon> decoded = decodeIcons(iconsJson);
+            Map<String, DecodedIcon> decoded = decodeIcons(iconsByRank);
             clientThread.invokeLater(() ->
             {
+                if (generation != iconsGeneration)
+                {
+                    return;
+                }
+
                 installIcons(decoded);
-                savedIcons = body;
+                iconsJson = body;
                 iconsVersion = ValianceSocket.getString(body, "version");
-                revision++;
-                save();
+                ranksRevision++;
+                if (fromServer)
+                {
+                    save();
+                }
                 client.refreshChat();
             });
         });
@@ -275,10 +289,10 @@ public class RankIcons
         final List<Integer> delays = new ArrayList<>();
     }
 
-    private static Map<String, DecodedIcon> decodeIcons(JsonObject iconsJson)
+    private static Map<String, DecodedIcon> decodeIcons(JsonObject iconsByRank)
     {
         Map<String, DecodedIcon> decoded = new HashMap<>();
-        for (Map.Entry<String, JsonElement> entry : iconsJson.entrySet())
+        for (Map.Entry<String, JsonElement> entry : iconsByRank.entrySet())
         {
             if (!entry.getValue().isJsonObject())
             {
@@ -351,7 +365,15 @@ public class RankIcons
             int iconId = CHAT_ICON_ID_BY_RANK.computeIfAbsent(entry.getKey(), rank -> chatIconManager.reserveChatIcon());
             chatIconManager.updateChatIcon(iconId, icon.frames.get(0));
 
-            RankIcon rankIcon = new RankIcon(iconId, icon.frames, icon.delays);
+            List<IndexedSprite> frames = new ArrayList<>();
+            for (BufferedImage image : icon.frames)
+            {
+                IndexedSprite frame = ImageUtil.getImageIndexedSprite(image, client);
+                frame.setOffsetY(RANK_ICON_OFFSET_Y);
+                frames.add(frame);
+            }
+
+            RankIcon rankIcon = new RankIcon(iconId, frames, icon.delays);
             rankIcon.nextFrameAt = now + icon.delays.get(0);
             icons.put(entry.getKey(), rankIcon);
         }
@@ -366,6 +388,7 @@ public class RankIcons
         }
 
         long now = System.currentTimeMillis();
+        IndexedSprite[] modIcons = client.getModIcons();
         for (RankIcon icon : icons.values())
         {
             if (icon.frames.size() < 2 || now < icon.nextFrameAt)
@@ -375,7 +398,12 @@ public class RankIcons
 
             icon.frame = (icon.frame + 1) % icon.frames.size();
             icon.nextFrameAt = now + icon.delays.get(icon.frame);
-            chatIconManager.updateChatIcon(icon.iconId, icon.frames.get(icon.frame));
+
+            int index = chatIconManager.chatIconIndex(icon.iconId);
+            if (modIcons != null && index >= 0 && index < modIcons.length)
+            {
+                modIcons[index] = icon.frames.get(icon.frame);
+            }
         }
 
         lowerIconsAndRedrawOnceLoaded();
@@ -485,9 +513,9 @@ public class RankIcons
         return tags.toString();
     }
 
-    public int getRevision()
+    public int getRanksRevision()
     {
-        return revision;
+        return ranksRevision;
     }
 
     static String normaliseName(String name)

@@ -60,9 +60,10 @@ public class ValianceSocket
 
     private OkHttpClient socketClient;
     private WebSocket webSocket;
-    private boolean open;
-    private JsonObject hello;
-    private final Deque<String> queuedWhileDisconnected = new ArrayDeque<>();
+    private boolean running;
+    private boolean connected;
+    private JsonObject handshake;
+    private final Deque<String> pendingMessages = new ArrayDeque<>();
     private int failedAttempts;
     private ScheduledFuture<?> pendingReconnect;
 
@@ -73,26 +74,28 @@ public class ValianceSocket
 
     public synchronized boolean isRunning()
     {
-        return hello != null;
+        return running;
     }
 
-    public synchronized void start(JsonObject helloMessage)
+    public synchronized void start(JsonObject handshakeMessage)
     {
-        if (hello != null)
+        if (running)
         {
             return;
         }
 
-        hello = helloMessage;
+        running = true;
+        handshake = handshakeMessage;
         failedAttempts = 0;
         connect();
     }
 
     public synchronized void stop()
     {
-        hello = null;
-        queuedWhileDisconnected.clear();
-        open = false;
+        running = false;
+        handshake = null;
+        pendingMessages.clear();
+        connected = false;
 
         if (pendingReconnect != null)
         {
@@ -109,22 +112,22 @@ public class ValianceSocket
 
     public synchronized void send(JsonObject message)
     {
-        if (hello == null)
+        if (!running)
         {
             return;
         }
 
         String text = gson.toJson(message);
-        if (open && webSocket.send(text))
+        if (connected && webSocket.send(text))
         {
             return;
         }
 
-        if (queuedWhileDisconnected.size() >= MAX_QUEUED_MESSAGES)
+        if (pendingMessages.size() >= MAX_QUEUED_MESSAGES)
         {
-            queuedWhileDisconnected.removeFirst();
+            pendingMessages.removeFirst();
         }
-        queuedWhileDisconnected.addLast(text);
+        pendingMessages.addLast(text);
     }
 
     private void connect()
@@ -151,17 +154,17 @@ public class ValianceSocket
             return;
         }
 
-        open = true;
+        connected = true;
         failedAttempts = 0;
-        socket.send(gson.toJson(hello));
+        socket.send(gson.toJson(handshake));
 
-        while (!queuedWhileDisconnected.isEmpty())
+        while (!pendingMessages.isEmpty())
         {
-            if (!socket.send(queuedWhileDisconnected.peekFirst()))
+            if (!socket.send(pendingMessages.peekFirst()))
             {
                 break;
             }
-            queuedWhileDisconnected.removeFirst();
+            pendingMessages.removeFirst();
         }
     }
 
@@ -190,9 +193,9 @@ public class ValianceSocket
                 return;
             }
 
-            if ("welcome".equals(getString(message, "type")) && hello != null)
+            if ("welcome".equals(getString(message, "type")) && running)
             {
-                hello.remove("history");
+                handshake.remove("history");
             }
         }
 
@@ -203,7 +206,7 @@ public class ValianceSocket
         }
     }
 
-    private synchronized void onLost(WebSocket socket, int code)
+    private synchronized void onDisconnected(WebSocket socket, int code)
     {
         if (socket != webSocket)
         {
@@ -211,9 +214,9 @@ public class ValianceSocket
         }
 
         webSocket = null;
-        open = false;
+        connected = false;
 
-        if (hello == null)
+        if (!running)
         {
             return;
         }
@@ -221,8 +224,9 @@ public class ValianceSocket
         if (code >= FIRST_NEVER_RETRY_CLOSE_CODE && code <= LAST_NEVER_RETRY_CLOSE_CODE)
         {
             log.warn("The Valiance server refused the connection ({})", code);
-            hello = null;
-            queuedWhileDisconnected.clear();
+            running = false;
+            handshake = null;
+            pendingMessages.clear();
             return;
         }
 
@@ -235,7 +239,7 @@ public class ValianceSocket
     private synchronized void reconnect()
     {
         pendingReconnect = null;
-        if (hello != null && webSocket == null)
+        if (running && webSocket == null)
         {
             connect();
         }
@@ -265,20 +269,20 @@ public class ValianceSocket
         public void onClosing(WebSocket socket, int code, String reason)
         {
             socket.close(NORMAL_CLOSURE, null);
-            onLost(socket, code);
+            onDisconnected(socket, code);
         }
 
         @Override
         public void onClosed(WebSocket socket, int code, String reason)
         {
-            onLost(socket, code);
+            onDisconnected(socket, code);
         }
 
         @Override
         public void onFailure(WebSocket socket, Throwable t, Response response)
         {
             log.debug("Lost the connection to the Valiance server", t);
-            onLost(socket, -1);
+            onDisconnected(socket, -1);
         }
     }
 }

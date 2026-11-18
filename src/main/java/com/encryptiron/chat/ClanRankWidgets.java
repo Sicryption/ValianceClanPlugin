@@ -24,7 +24,9 @@ import net.runelite.api.widgets.WidgetPositionMode;
 import net.runelite.api.widgets.WidgetSizeMode;
 import net.runelite.api.widgets.WidgetTextAlignment;
 import net.runelite.api.widgets.WidgetType;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.util.Text;
 
 @Singleton
@@ -37,13 +39,11 @@ public class ClanRankWidgets
 
     private static final int CHAT_LINE_BUILD_SCRIPT = 84;
 
-    private static final int[] PLAYER_LISTS = {
-        InterfaceID.ClansSidepanel.PLAYERLIST,
-        InterfaceID.ClansGuestSidepanel.PLAYERLIST,
-    };
-
     @Inject
     private Client client;
+
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private RankIcons rankIcons;
@@ -52,8 +52,8 @@ public class ClanRankWidgets
     private ValianceConfig config;
 
     private Set<Integer> clanRankSprites;
-    private boolean chatNeedsRankGraphicsHidden;
-    private int playerListRankRevision = -1;
+    private boolean chatRebuilt;
+    private int decoratedRanksRevision = -1;
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired event)
@@ -61,7 +61,7 @@ public class ClanRankWidgets
         int scriptId = event.getScriptId();
         if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == CHAT_LINE_BUILD_SCRIPT)
         {
-            chatNeedsRankGraphicsHidden = true;
+            chatRebuilt = true;
         }
         else if (scriptId == ScriptID.CLAN_SIDEPANEL_DRAW && config.showValianceRanks())
         {
@@ -72,15 +72,43 @@ public class ClanRankWidgets
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        chatNeedsRankGraphicsHidden = true;
+        chatRebuilt = true;
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (ValianceConfig.GROUP.equals(event.getGroup()) && ValianceConfig.SHOW_VALIANCE_RANKS.equals(event.getKey()))
+        {
+            redrawRanks();
+        }
+    }
+
+    public void redrawRanks()
+    {
+        clientThread.invokeLater(() ->
+        {
+            redrawPlayerList(InterfaceID.ClansSidepanel.UNIVERSE);
+            redrawPlayerList(InterfaceID.ClansGuestSidepanel.UNIVERSE);
+            client.refreshChat();
+        });
+    }
+
+    private void redrawPlayerList(int panelId)
+    {
+        Widget panel = client.getWidget(panelId);
+        if (panel != null && panel.getOnVarTransmitListener() != null)
+        {
+            client.runScript(panel.getOnVarTransmitListener());
+        }
     }
 
     @Subscribe
     public void onBeforeRender(BeforeRender event)
     {
-        if (chatNeedsRankGraphicsHidden)
+        if (chatRebuilt)
         {
-            chatNeedsRankGraphicsHidden = false;
+            chatRebuilt = false;
             if (config.showValianceRanks())
             {
                 hideChatRankGraphics();
@@ -98,9 +126,9 @@ public class ClanRankWidgets
 
         hideChatRankGraphics();
 
-        if (rankIcons.getRevision() != playerListRankRevision)
+        if (rankIcons.getRanksRevision() != decoratedRanksRevision)
         {
-            playerListRankRevision = rankIcons.getRevision();
+            decoratedRanksRevision = rankIcons.getRanksRevision();
             decoratePlayerLists();
         }
     }
@@ -241,19 +269,25 @@ public class ClanRankWidgets
 
     private void decoratePlayerLists()
     {
-        for (int listId : PLAYER_LISTS)
+        if (ClanChatService.isValiance(client.getClanChannel()))
         {
-            Widget list = client.getWidget(listId);
-            Widget[] children = list == null ? null : list.getChildren();
-            if (children != null)
-            {
-                decoratePlayerList(children);
-            }
+            decoratePlayerList(InterfaceID.ClansSidepanel.PLAYERLIST);
+        }
+        if (ClanChatService.isValiance(client.getGuestClanChannel()))
+        {
+            decoratePlayerList(InterfaceID.ClansGuestSidepanel.PLAYERLIST);
         }
     }
 
-    private void decoratePlayerList(Widget[] children)
+    private void decoratePlayerList(int listId)
     {
+        Widget list = client.getWidget(listId);
+        Widget[] children = list == null ? null : list.getChildren();
+        if (children == null)
+        {
+            return;
+        }
+
         for (Widget child : children)
         {
             if (child == null)
