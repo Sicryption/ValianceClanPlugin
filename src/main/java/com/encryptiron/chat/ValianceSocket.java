@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -55,6 +56,9 @@ public class ValianceSocket
     private static final int MAX_QUEUED_MESSAGES = 50;
     private static final long PING_INTERVAL_SECONDS = 30;
     private static final int MAX_BACKOFF_EXPONENT = 6;
+    // Added at random to every reconnect, so that when the server restarts its
+    // plugins come back spread over a few seconds rather than all at once.
+    private static final long MAX_RECONNECT_JITTER_MS = 5000;
 
     @Inject
     private OkHttpClient httpClient;
@@ -256,9 +260,10 @@ public class ValianceSocket
             return;
         }
 
-        long delaySeconds = 1L << Math.min(failedAttempts, MAX_BACKOFF_EXPONENT);
+        long delayMs = TimeUnit.SECONDS.toMillis(1L << Math.min(failedAttempts, MAX_BACKOFF_EXPONENT))
+            + ThreadLocalRandom.current().nextLong(MAX_RECONNECT_JITTER_MS + 1);
         failedAttempts++;
-        pendingReconnect = executor.schedule(this::reconnect, delaySeconds, TimeUnit.SECONDS);
+        pendingReconnect = executor.schedule(this::reconnect, delayMs, TimeUnit.MILLISECONDS);
     }
 
     private synchronized void reconnect()
