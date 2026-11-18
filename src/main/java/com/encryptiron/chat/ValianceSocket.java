@@ -226,7 +226,6 @@ public class ValianceSocket
             if ("welcome".equals(getString(message, "type")) && hello != null)
             {
                 hello.remove("history");
-                hello.remove("history_after");
             }
         }
 

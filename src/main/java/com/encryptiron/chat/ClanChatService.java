@@ -1,10 +1,14 @@
 package com.encryptiron.chat;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.inject.Inject;
@@ -27,7 +31,6 @@ import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
-import net.runelite.api.events.ScriptCallbackEvent;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
@@ -49,12 +52,11 @@ import net.runelite.client.util.Text;
  * Only the player's own messages are reported. Everyone else's are reported by
  * their own plugin, if they have one.
  *
- * A server line decides everything about itself: its chat type, the name and
- * sender (the channel name in brackets) and the message, tags such as col and
- * img included. Anything the server took from players, such as names, is
- * escaped there, so the text is used as it is. Every field but the message may
- * be left out. Without a chat type, or with one this client does not know, the
- * line is a broadcast in whichever Valiance channel the player is in.
+ * A server line is a clan broadcast in whichever Valiance channel the player is
+ * in. The game draws it as "[Valiance] message", naming the clan itself, so the
+ * message is all the server decides, tags such as col and img included.
+ * Anything the server took from players, such as names, is escaped there, so
+ * the text is used as it is.
  */
 @Slf4j
 @Singleton
@@ -78,8 +80,10 @@ public class ClanChatService
 
     private static final String HISTORY_END_MESSAGE = "<col=7f7f7f>End of recent clan chat</col>";
 
-    private static final String CHAT_MESSAGE_BUILDING = "chatMessageBuilding";
-    private static final Pattern CLAN_NAME_TEXT = Pattern.compile(Pattern.quote(CLAN_NAME), Pattern.CASE_INSENSITIVE);
+    // How far apart the chatbox's time for a line and the log's may be for the
+    // two to be taken as one. They differ by however long the line took to
+    // reach the server.
+    private static final int SAME_LINE_SECONDS = 60;
 
     @Inject
     private Client client;
@@ -102,8 +106,6 @@ public class ClanChatService
     // addChatMessage has returned.
     private boolean addingLines;
     private final Set<MessageNode> addedNodes = Collections.newSetFromMap(new WeakHashMap<>());
-    // The server's lines, live or replayed, so their sender can be drawn
-    private final Set<MessageNode> serverNodes = Collections.newSetFromMap(new WeakHashMap<>());
 
     public void startUp()
     {
@@ -201,7 +203,6 @@ public class ClanChatService
         if (!historyRequested)
         {
             hello.addProperty("history", config.clanChatHistoryCount());
-            hello.addProperty("history_after", newestClanChatMillis());
             historyRequested = true;
         }
 
@@ -209,15 +210,19 @@ public class ClanChatService
     }
 
     /**
-     * When the newest clan chat line already in the chatbox was sent, in epoch
-     * ms, or 0 if there is none. History older than this is still on screen.
+     * Every line already in the chatbox, by lineKey, with the times they were
+     * said, so history the chatbox still shows is not added again.
+     *
+     * Looked at line by line rather than by the newest time on screen: the
+     * chatbox can hold clan chat the log never had, from players without the
+     * plugin, and can have kept some kinds of line over a log-in but not
+     * others, so no one time says what is missing.
      */
-    private long newestClanChatMillis()
+    private Map<String, List<Integer>> linesInChatbox()
     {
-        long newestSeconds = 0;
-        for (ChatMessageType type : new ChatMessageType[]{ChatMessageType.CLAN_CHAT, ChatMessageType.CLAN_GUEST_CHAT})
+        Map<String, List<Integer>> lines = new HashMap<>();
+        for (ChatLineBuffer buffer : client.getChatLineMap().values())
         {
-            ChatLineBuffer buffer = client.getChatLineMap().get(type.getType());
             if (buffer == null)
             {
                 continue;
@@ -227,14 +232,40 @@ public class ClanChatService
             {
                 if (node != null)
                 {
-                    newestSeconds = Math.max(newestSeconds, node.getTimestamp());
+                    lines.computeIfAbsent(lineKey(node.getName(), node.getValue()), key -> new ArrayList<>())
+                        .add(node.getTimestamp());
                 }
             }
         }
+        return lines;
+    }
 
-        // Timestamps here are whole seconds, so everything within the newest
-        // one counts as already shown.
-        return newestSeconds == 0 ? 0 : newestSeconds * 1000 + 999;
+    /** Who said a line and what, as plain text, so a line matches however it was drawn. */
+    private static String lineKey(String name, String message)
+    {
+        String plainName = name == null ? "" : Text.sanitize(name).toLowerCase(Locale.ROOT);
+        String plainMessage = message == null ? "" : Text.removeTags(message);
+        return plainName + "\n" + plainMessage;
+    }
+
+    /** Whether the chatbox already shows this line, said within a minute of sentAtMillis. */
+    private static boolean isInChatbox(Map<String, List<Integer>> chatbox, String name, String message, long sentAtMillis)
+    {
+        List<Integer> times = chatbox.get(lineKey(name, message));
+        if (times == null)
+        {
+            return false;
+        }
+
+        long sentAt = sentAtMillis / 1000;
+        for (int time : times)
+        {
+            if (Math.abs(time - sentAt) <= SAME_LINE_SECONDS)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Subscribe
@@ -302,6 +333,9 @@ public class ClanChatService
             ? ChatMessageType.CLAN_CHAT
             : ChatMessageType.CLAN_GUEST_CHAT;
 
+        Map<String, List<Integer>> chatbox = linesInChatbox();
+        boolean added = false;
+
         addingLines = true;
         try
         {
@@ -313,7 +347,17 @@ public class ClanChatService
                 }
 
                 JsonObject entry = element.getAsJsonObject();
-                if ("chat_message".equals(ValianceSocket.getString(entry, "type")))
+                boolean serverLine = "chat_message".equals(ValianceSocket.getString(entry, "type"));
+                JsonElement sentAt = entry.get("sent_at");
+                if (sentAt != null && sentAt.isJsonPrimitive() && isInChatbox(chatbox,
+                    serverLine ? "" : ValianceSocket.getString(entry, "rsn"),
+                    ValianceSocket.getString(entry, "message"),
+                    sentAt.getAsLong()))
+                {
+                    continue;
+                }
+
+                if (serverLine)
                 {
                     addServerLine(entry);
                 }
@@ -321,9 +365,15 @@ public class ClanChatService
                 {
                     addHistoryMessage(chatType, entry);
                 }
+                added = true;
             }
 
-            client.addChatMessage(broadcastType(), "", HISTORY_END_MESSAGE, CLAN_NAME);
+            // Only after lines this added: with everything still on screen,
+            // there is no history to end.
+            if (added)
+            {
+                client.addChatMessage(broadcastType(), "", HISTORY_END_MESSAGE, CLAN_NAME);
+            }
         }
         finally
         {
@@ -356,82 +406,19 @@ public class ClanChatService
             return;
         }
 
-        String name = ValianceSocket.getString(line, "name");
-        String sender = ValianceSocket.getString(line, "sender");
-
-        MessageNode node = client.addChatMessage(
-            serverLineType(ValianceSocket.getString(line, "chat_type")),
-            name == null ? "" : name,
-            message,
-            sender == null ? CLAN_NAME : sender);
+        MessageNode node = client.addChatMessage(broadcastType(), "", message, CLAN_NAME);
         if (node == null)
         {
             return;
         }
 
         addedNodes.add(node);
-        serverNodes.add(node);
 
         JsonElement sentAt = line.get("sent_at");
         if (sentAt != null && sentAt.isJsonPrimitive())
         {
             node.setTimestamp((int) (sentAt.getAsLong() / 1000));
         }
-    }
-
-    private ChatMessageType serverLineType(String typeName)
-    {
-        if (typeName != null)
-        {
-            try
-            {
-                return ChatMessageType.valueOf(typeName);
-            }
-            catch (IllegalArgumentException ex)
-            {
-                log.debug("Unknown chat type {} from the Valiance server", typeName);
-            }
-        }
-
-        return broadcastType();
-    }
-
-    /**
-     * Draws a server line's sender where the game would put the channel's name.
-     *
-     * The game names a clan line by the channel it belongs to and ignores the
-     * line's own sender, so without this every one reads [Valiance]. An empty
-     * sender leaves the channel off. Lines whose type has no channel, such as
-     * game messages, are left as they are.
-     */
-    @Subscribe
-    public void onScriptCallbackEvent(ScriptCallbackEvent event)
-    {
-        if (!CHAT_MESSAGE_BUILDING.equals(event.getEventName()))
-        {
-            return;
-        }
-
-        int[] intStack = client.getIntStack();
-        int intStackSize = client.getIntStackSize();
-        MessageNode node = client.getMessages().get(intStack[intStackSize - 1]);
-        if (node == null || !serverNodes.contains(node))
-        {
-            return;
-        }
-
-        Object[] objectStack = client.getObjectStack();
-        int objectStackSize = client.getObjectStackSize();
-        Object channel = objectStack[objectStackSize - 4];
-        if (!(channel instanceof String) || ((String) channel).isEmpty())
-        {
-            return;
-        }
-
-        String sender = node.getSender() == null ? "" : node.getSender();
-        objectStack[objectStackSize - 4] = sender.isEmpty()
-            ? ""
-            : CLAN_NAME_TEXT.matcher((String) channel).replaceAll(Matcher.quoteReplacement(sender));
     }
 
     /**
