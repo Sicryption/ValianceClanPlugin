@@ -5,7 +5,6 @@ import javax.inject.Inject;
 import com.encryptiron.chat.ClanChatService;
 import com.encryptiron.chat.ClanRankWidgets;
 import com.encryptiron.chat.RankIcons;
-import com.encryptiron.chat.ServerChatMessages;
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
 import com.encryptiron.rest.OnBossKilled;
@@ -63,9 +62,6 @@ public class ValianceClanPlugin extends Plugin
     private ClanChatService clanChatService;
 
     @Inject
-    private ServerChatMessages serverChatMessages;
-
-    @Inject
     private RankIcons rankIcons;
 
     @Inject
@@ -94,7 +90,6 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(popUpQueue);
 
         clanChatService.startUp();
-        serverChatMessages.startUp();
         rankIcons.startUp();
         eventBus.register(clanChatService);
         eventBus.register(rankIcons);
