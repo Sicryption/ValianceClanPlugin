@@ -1,7 +1,5 @@
 package com.encryptiron;
 
-import com.encryptiron.chat.EventDropBroadcastFilter;
-
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -76,18 +74,6 @@ public interface ValianceConfig extends Config
     default int clanChatHistoryCount()
     {
         return 10;
-    }
-
-    @ConfigItem(
-        keyName = "eventDropBroadcasts",
-        name = "Event drop broadcasts",
-        description = "Which teams' event drops are announced in clan chat.",
-        position = 7,
-        section = clanChatSection
-    )
-    default EventDropBroadcastFilter eventDropBroadcasts()
-    {
-        return EventDropBroadcastFilter.ALL_TEAMS;
     }
 
     @ConfigItem(

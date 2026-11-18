@@ -32,7 +32,7 @@ import okhttp3.WebSocketListener;
  *
  * Everything else the plugin sends is a request the server answers. This stays
  * open while the player is in the Valiance clan channel, so the server can send
- * things as they happen (event drop broadcasts), and the plugin reports the
+ * things as they happen (chat messages, rank changes), and the plugin reports the
  * player's own clan chat messages up it.
  *
  * Every message either way is a JSON object with a "type". Handlers are
