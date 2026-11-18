@@ -27,18 +27,6 @@ import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 
-/**
- * The live connection to the Valiance server.
- *
- * Everything else the plugin sends is a request the server answers. This stays
- * open while the player is in the Valiance clan channel, so the server can send
- * things as they happen (chat messages, rank changes), and the plugin reports the
- * player's own clan chat messages up it.
- *
- * Every message either way is a JSON object with a "type". Handlers are
- * registered per type and run on the client thread; types without a handler
- * are ignored, so the server can add new ones without breaking this version.
- */
 @Slf4j
 @Singleton
 public class ValianceSocket
@@ -46,18 +34,11 @@ public class ValianceSocket
     private static final int PORT = 8080;
     private static final String PATH = "/api/plugin/ws";
     private static final int NORMAL_CLOSURE = 1000;
-    // The server closes with these when it will never accept this hello (a
-    // malformed one, or a world it does not track), so retrying would only be
-    // refused again.
-    private static final int FIRST_REFUSAL_CODE = 4000;
-    private static final int LAST_REFUSAL_CODE = 4099;
-    // Chat said while the connection is down is sent once it is back, up to this
-    // many messages; past that the oldest are dropped.
+    private static final int FIRST_NEVER_RETRY_CLOSE_CODE = 4000;
+    private static final int LAST_NEVER_RETRY_CLOSE_CODE = 4099;
     private static final int MAX_QUEUED_MESSAGES = 50;
     private static final long PING_INTERVAL_SECONDS = 30;
     private static final int MAX_BACKOFF_EXPONENT = 6;
-    // Added at random to every reconnect, so that when the server restarts its
-    // plugins come back spread over a few seconds rather than all at once.
     private static final long MAX_RECONNECT_JITTER_MS = 5000;
 
     @Inject
@@ -77,35 +58,24 @@ public class ValianceSocket
 
     private final Map<String, Consumer<JsonObject>> handlers = new ConcurrentHashMap<>();
 
-    // Everything below is guarded by this.
     private OkHttpClient socketClient;
     private WebSocket webSocket;
     private boolean open;
-    // Sent on every (re)connect. Null while stopped.
     private JsonObject hello;
-    private final Deque<String> queued = new ArrayDeque<>();
+    private final Deque<String> queuedWhileDisconnected = new ArrayDeque<>();
     private int failedAttempts;
     private ScheduledFuture<?> pendingReconnect;
 
-    /** Runs handler on the client thread for every message of this type. */
     public void setHandler(String type, Consumer<JsonObject> handler)
     {
         handlers.put(type, handler);
     }
 
-    /** Whether the connection is wanted, whether or not it is currently up. */
     public synchronized boolean isRunning()
     {
         return hello != null;
     }
 
-    /**
-     * Opens the connection and keeps it open, reconnecting as needed, until
-     * {@link #stop()}. Does nothing if already running.
-     *
-     * Any "history" in the hello is asked for only until a welcome arrives, so a
-     * reconnect later in the session does not replay it.
-     */
     public synchronized void start(JsonObject helloMessage)
     {
         if (hello != null)
@@ -121,7 +91,7 @@ public class ValianceSocket
     public synchronized void stop()
     {
         hello = null;
-        queued.clear();
+        queuedWhileDisconnected.clear();
         open = false;
 
         if (pendingReconnect != null)
@@ -137,7 +107,6 @@ public class ValianceSocket
         }
     }
 
-    /** Sends a message now, or once reconnected. Dropped while stopped. */
     public synchronized void send(JsonObject message)
     {
         if (hello == null)
@@ -151,19 +120,17 @@ public class ValianceSocket
             return;
         }
 
-        if (queued.size() >= MAX_QUEUED_MESSAGES)
+        if (queuedWhileDisconnected.size() >= MAX_QUEUED_MESSAGES)
         {
-            queued.removeFirst();
+            queuedWhileDisconnected.removeFirst();
         }
-        queued.addLast(text);
+        queuedWhileDisconnected.addLast(text);
     }
 
     private void connect()
     {
         if (socketClient == null)
         {
-            // Pings let a connection that died without closing (lost network)
-            // be noticed and replaced rather than sitting open forever.
             socketClient = httpClient.newBuilder()
                 .pingInterval(PING_INTERVAL_SECONDS, TimeUnit.SECONDS)
                 .build();
@@ -188,13 +155,13 @@ public class ValianceSocket
         failedAttempts = 0;
         socket.send(gson.toJson(hello));
 
-        while (!queued.isEmpty())
+        while (!queuedWhileDisconnected.isEmpty())
         {
-            if (!socket.send(queued.peekFirst()))
+            if (!socket.send(queuedWhileDisconnected.peekFirst()))
             {
                 break;
             }
-            queued.removeFirst();
+            queuedWhileDisconnected.removeFirst();
         }
     }
 
@@ -251,11 +218,11 @@ public class ValianceSocket
             return;
         }
 
-        if (code >= FIRST_REFUSAL_CODE && code <= LAST_REFUSAL_CODE)
+        if (code >= FIRST_NEVER_RETRY_CLOSE_CODE && code <= LAST_NEVER_RETRY_CLOSE_CODE)
         {
             log.warn("The Valiance server refused the connection ({})", code);
             hello = null;
-            queued.clear();
+            queuedWhileDisconnected.clear();
             return;
         }
 
@@ -298,8 +265,6 @@ public class ValianceSocket
         public void onClosing(WebSocket socket, int code, String reason)
         {
             socket.close(NORMAL_CLOSURE, null);
-            // Handled here rather than in onClosed so the server's own close
-            // code is what decides whether to reconnect.
             onLost(socket, code);
         }
 

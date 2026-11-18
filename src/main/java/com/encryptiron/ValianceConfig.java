@@ -80,7 +80,7 @@ public interface ValianceConfig extends Config
         keyName = "showValianceRanks",
         name = "Valiance ranks",
         description = "Shows every Valiance rank a member holds beside their name in clan chat, in place of their in-game clan rank.",
-        position = 8,
+        position = 7,
         section = clanChatSection
     )
     default boolean showValianceRanks()

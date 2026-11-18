@@ -113,7 +113,6 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(rankIcons);
         eventBus.unregister(clanRankWidgets);
         clanChatService.shutDown();
-        // Puts the in-game ranks back on lines already in the chatbox.
         clientThread.invoke(client::refreshChat);
 
         MessageHeaderData.reset();
@@ -123,7 +122,6 @@ public class ValianceClanPlugin extends Plugin
     @Subscribe
     public void onPlayerChanged(PlayerChanged playerChanged)
     {
-        // Other players can load in before the local player exists during log-in
         Player localPlayer = client.getLocalPlayer();
         if (localPlayer != null && playerChanged.getPlayer().getId() == localPlayer.getId())
         {

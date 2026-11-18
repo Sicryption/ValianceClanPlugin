@@ -43,20 +43,6 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ChatIconManager;
 import net.runelite.client.util.Text;
 
-/**
- * Valiance ranks beside names in the Valiance clan chat, in place of the
- * in-game clan ranks.
- *
- * Each member shows every one of their ranks, as the server orders them. The
- * roster and icons are saved to disk and only fetched again when the server's
- * version differs, which it says in its welcome; changes made while the player
- * is online are pushed as they happen.
- *
- * Names are rewritten as the chatbox builds each clan chat line, the same way
- * RuneLite's own Chat Channel plugin adds friends chat ranks: whatever icons
- * the game put before the name are replaced, keeping only the account icons
- * (ironman and the like) that are not clan ranks.
- */
 @Slf4j
 @Singleton
 public class RankIcons
@@ -66,13 +52,10 @@ public class RankIcons
 
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
     private static final int NEAR_BLACK = 0x010101;
-    // Measured against the in-game rank graphic on the same chat line.
-    private static final int ICON_DROP = 2;
+    private static final int RANK_ICON_OFFSET_Y = 2;
     private static final Pattern NAME_SPACING = Pattern.compile("[\\s_\\u00A0]+");
 
-    // Icons the game shows in a name that say something about the account rather
-    // than its clan rank, so they stay when the clan rank is replaced.
-    private static final Set<Integer> ACCOUNT_ICONS = Set.of(
+    private static final Set<Integer> NON_RANK_ACCOUNT_ICONS = Set.of(
         IconID.PLAYER_MODERATOR.getIndex(),
         IconID.JAGEX_MODERATOR.getIndex(),
         IconID.IRONMAN.getIndex(),
@@ -105,7 +88,6 @@ public class RankIcons
     @Inject
     private ScheduledExecutorService executor;
 
-    /** One rank's icon, and where its animation has got to. */
     private static class RankIcon
     {
         final int iconId;
@@ -122,19 +104,14 @@ public class RankIcons
         }
     }
 
-    // Everything below is only touched on the client thread.
     private Map<String, List<String>> members = Collections.emptyMap();
     private final Map<String, RankIcon> icons = new HashMap<>();
-    // Chat icon slots cannot be given back, so each rank keeps the one it was
-    // first given for as long as the client runs, however often icons change.
-    private static final Map<String, Integer> ICON_IDS = new HashMap<>();
+    private static final Map<String, Integer> CHAT_ICON_ID_BY_RANK = new HashMap<>();
     private JsonObject savedRanks;
     private JsonObject savedIcons;
     private int revision;
-    // Whether any rank icon had no sprite when last looked at; see lowerIcons
-    private boolean iconsMissing;
+    private boolean iconSpritesWereMissing;
 
-    // Read off the client thread when building the hello.
     private volatile String ranksVersion;
     private volatile String iconsVersion;
 
@@ -155,7 +132,6 @@ public class RankIcons
         return iconsVersion;
     }
 
-    /** Takes whichever of the roster and icons the server's welcome carried. */
     public void onWelcome(JsonObject welcome)
     {
         JsonElement ranks = welcome.get("ranks");
@@ -196,8 +172,6 @@ public class RankIcons
 
         clientThread.invokeLater(() ->
         {
-            // Anything the server has already sent this session is newer than
-            // what was saved before it.
             if (savedRanks == null && saved.has("ranks") && saved.get("ranks").isJsonObject())
             {
                 applyRanks(saved.getAsJsonObject("ranks"));
@@ -279,8 +253,6 @@ public class RankIcons
             return;
         }
 
-        // Decoding every frame of every icon is slow enough to notice, so it is
-        // done off the client thread and the result handed back.
         JsonObject iconsJson = iconsElement.getAsJsonObject();
         executor.execute(() ->
         {
@@ -332,7 +304,7 @@ public class RankIcons
                     BufferedImage image = ImageIO.read(new ByteArrayInputStream(png));
                     if (image != null)
                     {
-                        result.frames.add(keepBlackVisible(image));
+                        result.frames.add(replacePureBlackWithNearBlack(image));
                         result.delays.add(delayArray.get(i).getAsInt());
                     }
                 }
@@ -350,14 +322,7 @@ public class RankIcons
         return decoded;
     }
 
-    /**
-     * The image with pure black made almost black.
-     *
-     * The game draws colour 0 in a chat icon as transparent, so the black
-     * outlines every rank icon has would otherwise vanish, leaving the icon
-     * looking nothing like the in-game one it copies.
-     */
-    private static BufferedImage keepBlackVisible(BufferedImage source)
+    private static BufferedImage replacePureBlackWithNearBlack(BufferedImage source)
     {
         BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < source.getHeight(); y++)
@@ -383,7 +348,7 @@ public class RankIcons
         for (Map.Entry<String, DecodedIcon> entry : decoded.entrySet())
         {
             DecodedIcon icon = entry.getValue();
-            int iconId = ICON_IDS.computeIfAbsent(entry.getKey(), rank -> chatIconManager.reserveChatIcon());
+            int iconId = CHAT_ICON_ID_BY_RANK.computeIfAbsent(entry.getKey(), rank -> chatIconManager.reserveChatIcon());
             chatIconManager.updateChatIcon(iconId, icon.frames.get(0));
 
             RankIcon rankIcon = new RankIcon(iconId, icon.frames, icon.delays);
@@ -413,23 +378,10 @@ public class RankIcons
             chatIconManager.updateChatIcon(icon.iconId, icon.frames.get(icon.frame));
         }
 
-        lowerIcons();
+        lowerIconsAndRedrawOnceLoaded();
     }
 
-    /**
-     * Draws every rank icon ICON_DROP pixels lower than the game would.
-     *
-     * The game sits icons in text on the text's baseline, which leaves them
-     * higher than the in-game rank graphics they replace. The drop is set on
-     * the sprite itself, and set again whenever the sprite has been replaced:
-     * by an animation frame, or by RuneLite rebuilding the icons at log-in.
-     *
-     * Also redraws the chat once icons that were missing are back. The game
-     * measures a name by the icons it has when it lays the line out, so a line
-     * drawn while RuneLite was rebuilding them at log-in left no room for its
-     * rank icons, and the message ran over the name once they appeared.
-     */
-    private void lowerIcons()
+    private void lowerIconsAndRedrawOnceLoaded()
     {
         IndexedSprite[] modIcons = client.getModIcons();
         boolean missing = modIcons == null;
@@ -443,18 +395,18 @@ public class RankIcons
                 continue;
             }
 
-            if (modIcons[index].getOffsetY() != ICON_DROP)
+            if (modIcons[index].getOffsetY() != RANK_ICON_OFFSET_Y)
             {
-                modIcons[index].setOffsetY(ICON_DROP);
+                modIcons[index].setOffsetY(RANK_ICON_OFFSET_Y);
             }
         }
 
-        if (iconsMissing && !missing)
+        if (iconSpritesWereMissing && !missing)
         {
             log.debug("Valiance rank icons are back, redrawing the chat");
             client.refreshChat();
         }
-        iconsMissing = missing;
+        iconSpritesWereMissing = missing;
     }
 
     @Subscribe
@@ -484,11 +436,6 @@ public class RankIcons
         objectStack[objectStackSize - 3] = rewriteName((String) name);
     }
 
-    /**
-     * Whether the line was said in the Valiance clan channel. Decided by which
-     * channel the line's type belongs to, the same way the chat recorder does,
-     * rather than by the line's sender field.
-     */
     private boolean isValianceClanChat(MessageNode node)
     {
         ChatMessageType type = node.getType();
@@ -503,14 +450,13 @@ public class RankIcons
         return false;
     }
 
-    /** The name with its clan rank icons swapped for the member's Valiance ones. */
     private String rewriteName(String name)
     {
         StringBuilder accountIcons = new StringBuilder();
         Matcher tags = IMG_TAG.matcher(name);
         while (tags.find())
         {
-            if (ACCOUNT_ICONS.contains(Integer.parseInt(tags.group(1))))
+            if (NON_RANK_ACCOUNT_ICONS.contains(Integer.parseInt(tags.group(1))))
             {
                 accountIcons.append(tags.group());
             }
@@ -521,7 +467,6 @@ public class RankIcons
         return rankIconTags(plainName) + accountIcons + plainName;
     }
 
-    /** The <img> tags for every Valiance rank the player shows, in order. Empty for anyone without one. */
     public String rankIconTags(String name)
     {
         StringBuilder tags = new StringBuilder();
@@ -540,13 +485,11 @@ public class RankIcons
         return tags.toString();
     }
 
-    /** Goes up whenever the roster or icons change, so drawn ranks can be redrawn. */
     public int getRevision()
     {
         return revision;
     }
 
-    /** The same key the server builds the roster with. */
     static String normaliseName(String name)
     {
         return NAME_SPACING.matcher(name).replaceAll(" ").trim().toLowerCase(Locale.ROOT);

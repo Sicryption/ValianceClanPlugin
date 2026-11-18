@@ -11,7 +11,6 @@ public class ValianceClanPluginTest
     @SuppressWarnings("unchecked")
     public static void main(String[] args) throws Exception
     {
-        // Debug logging for this plugin only; --debug would turn it on for every plugin
         ((Logger) LoggerFactory.getLogger(ValianceClanPlugin.class.getPackage().getName())).setLevel(Level.DEBUG);
 
         ExternalPluginManager.loadBuiltin(ValianceClanPlugin.class);

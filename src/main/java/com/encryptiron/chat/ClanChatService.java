@@ -36,54 +36,22 @@ import net.runelite.client.config.RuneScapeProfileType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.Text;
 
-/**
- * The plugin's side of the Valiance clan chat.
- *
- * Holds the server connection open while the player is in the Valiance clan
- * channel, as a member or as a guest. While it is open:
- * - every clan chat message the player themselves sends is reported to the
- *   server, which keeps the clan's chat log;
- * - lines the server sends (event drop broadcasts, anything staff send) are
- *   shown as they arrive, exactly as the server words them;
- * - on log-in, the last few lines from the log are shown, so the chat has
- *   some context before anything new is said. The log holds both kinds of
- *   line, and each is shown the same way it would have been live.
- *
- * Only the player's own messages are reported. Everyone else's are reported by
- * their own plugin, if they have one.
- *
- * A server line is a clan broadcast in whichever Valiance channel the player is
- * in. The game draws it as "[Valiance] message", naming the clan itself, so the
- * message is all the server decides, tags such as col and img included.
- * Anything the server took from players, such as names, is escaped there, so
- * the text is used as it is.
- */
 @Slf4j
 @Singleton
 public class ClanChatService
 {
     public static final String CLAN_NAME = "Valiance";
 
-    // How long the player can be out of the clan channel before the connection
-    // is closed. Covers the moments during log-in and world hops when the
-    // channel has not loaded yet, so those do not reconnect each time.
-    private static final int TICKS_BEFORE_DISCONNECT = 10;
+    private static final int TICKS_OUTSIDE_CLAN_BEFORE_DISCONNECT = 10;
 
-    // A message older than this when it reaches us was not just said: it is
-    // being replayed, such as by the Chat History plugin after a log-in.
-    private static final int MAX_MESSAGE_AGE_SECONDS = 10;
+    private static final int MAX_REPORTED_MESSAGE_AGE_SECONDS = 10;
 
-    // The game escapes a typed angle bracket as <lt> or <gt>, so any other tag
-    // in a stored message did not come from the player typing it.
     private static final Pattern NON_ESCAPE_TAG = Pattern.compile("<(?!lt>|gt>)[^>]*>");
     private static final Pattern NON_NAME_CHARACTER = Pattern.compile("[^A-Za-z0-9 _-]");
 
     private static final String HISTORY_END_MESSAGE = "<col=7f7f7f>End of recent clan chat</col>";
 
-    // How far apart the chatbox's time for a line and the log's may be for the
-    // two to be taken as one. They differ by however long the line took to
-    // reach the server.
-    private static final int SAME_LINE_SECONDS = 60;
+    private static final int MAX_SECONDS_BETWEEN_SAME_LINE = 60;
 
     @Inject
     private Client client;
@@ -98,14 +66,9 @@ public class ClanChatService
     private RankIcons rankIcons;
 
     private int ticksOutsideClan;
-    // History is shown once per log-in, not on every reconnect or world hop.
-    private boolean historyRequested;
-    // Set while this adds lines of its own (history, or a line from the server),
-    // so they are not taken for the player speaking. The lines themselves are
-    // remembered too, in case their ChatMessage event arrives after
-    // addChatMessage has returned.
-    private boolean addingLines;
-    private final Set<MessageNode> addedNodes = Collections.newSetFromMap(new WeakHashMap<>());
+    private boolean historyRequestedThisLogin;
+    private boolean addingOwnLines;
+    private final Set<MessageNode> ownLineNodes = Collections.newSetFromMap(new WeakHashMap<>());
 
     public void startUp()
     {
@@ -117,7 +80,7 @@ public class ClanChatService
     {
         socket.stop();
         ticksOutsideClan = 0;
-        historyRequested = false;
+        historyRequestedThisLogin = false;
     }
 
     public static boolean isValiance(ClanChannel channel)
@@ -125,7 +88,6 @@ public class ClanChatService
         return channel != null && CLAN_NAME.equalsIgnoreCase(Text.removeTags(channel.getName()).trim());
     }
 
-    /** The broadcast message type for whichever Valiance channel the player is in. */
     public ChatMessageType broadcastType()
     {
         return isValiance(client.getClanChannel())
@@ -158,7 +120,7 @@ public class ClanChatService
                 startSocket();
             }
         }
-        else if (socket.isRunning() && ++ticksOutsideClan >= TICKS_BEFORE_DISCONNECT)
+        else if (socket.isRunning() && ++ticksOutsideClan >= TICKS_OUTSIDE_CLAN_BEFORE_DISCONNECT)
         {
             socket.stop();
         }
@@ -172,8 +134,6 @@ public class ClanChatService
             return;
         }
 
-        // Clan chat is only tracked on the main game, the same as everything
-        // else the plugin sends.
         RuneScapeProfileType profileType = RuneScapeProfileType.getCurrent(client);
         if (profileType != RuneScapeProfileType.STANDARD)
         {
@@ -182,15 +142,11 @@ public class ClanChatService
 
         JsonObject hello = new JsonObject();
         hello.addProperty("type", "hello");
-        // As a string: a JSON number would round a 64-bit hash on the server.
         hello.addProperty("account_hash", Long.toString(client.getAccountHash()));
         hello.addProperty("rsn", Text.sanitize(localPlayer.getName()));
         hello.addProperty("profile_type", profileType.name());
-        // So this player's replayed messages carry their ironman icon.
         hello.addProperty("account_type", client.getVarbitValue(VarbitID.IRONMAN));
 
-        // So the welcome only carries the ranks and icons if they have changed
-        // since they were saved.
         if (rankIcons.getRanksVersion() != null)
         {
             hello.addProperty("ranks_version", rankIcons.getRanksVersion());
@@ -200,25 +156,16 @@ public class ClanChatService
             hello.addProperty("icons_version", rankIcons.getIconsVersion());
         }
 
-        if (!historyRequested)
+        if (!historyRequestedThisLogin)
         {
             hello.addProperty("history", config.clanChatHistoryCount());
-            historyRequested = true;
+            historyRequestedThisLogin = true;
         }
 
         socket.start(hello);
     }
 
-    /**
-     * Every line already in the chatbox, by lineKey, with the times they were
-     * said, so history the chatbox still shows is not added again.
-     *
-     * Looked at line by line rather than by the newest time on screen: the
-     * chatbox can hold clan chat the log never had, from players without the
-     * plugin, and can have kept some kinds of line over a log-in but not
-     * others, so no one time says what is missing.
-     */
-    private Map<String, List<Integer>> linesInChatbox()
+    private Map<String, List<Integer>> chatboxLineTimesByKey()
     {
         Map<String, List<Integer>> lines = new HashMap<>();
         for (ChatLineBuffer buffer : client.getChatLineMap().values())
@@ -232,7 +179,7 @@ public class ClanChatService
             {
                 if (node != null)
                 {
-                    lines.computeIfAbsent(lineKey(node.getName(), node.getValue()), key -> new ArrayList<>())
+                    lines.computeIfAbsent(plainNameAndMessage(node.getName(), node.getValue()), key -> new ArrayList<>())
                         .add(node.getTimestamp());
                 }
             }
@@ -240,18 +187,16 @@ public class ClanChatService
         return lines;
     }
 
-    /** Who said a line and what, as plain text, so a line matches however it was drawn. */
-    private static String lineKey(String name, String message)
+    private static String plainNameAndMessage(String name, String message)
     {
         String plainName = name == null ? "" : Text.sanitize(name).toLowerCase(Locale.ROOT);
         String plainMessage = message == null ? "" : Text.removeTags(message);
         return plainName + "\n" + plainMessage;
     }
 
-    /** Whether the chatbox already shows this line, said within a minute of sentAtMillis. */
-    private static boolean isInChatbox(Map<String, List<Integer>> chatbox, String name, String message, long sentAtMillis)
+    private static boolean isAlreadyInChatbox(Map<String, List<Integer>> chatbox, String name, String message, long sentAtMillis)
     {
-        List<Integer> times = chatbox.get(lineKey(name, message));
+        List<Integer> times = chatbox.get(plainNameAndMessage(name, message));
         if (times == null)
         {
             return false;
@@ -260,7 +205,7 @@ public class ClanChatService
         long sentAt = sentAtMillis / 1000;
         for (int time : times)
         {
-            if (Math.abs(time - sentAt) <= SAME_LINE_SECONDS)
+            if (Math.abs(time - sentAt) <= MAX_SECONDS_BETWEEN_SAME_LINE)
             {
                 return true;
             }
@@ -271,7 +216,7 @@ public class ClanChatService
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        if (addingLines || addedNodes.contains(event.getMessageNode()))
+        if (addingOwnLines || ownLineNodes.contains(event.getMessageNode()))
         {
             return;
         }
@@ -301,7 +246,7 @@ public class ClanChatService
             return;
         }
 
-        if (Instant.now().getEpochSecond() - event.getTimestamp() > MAX_MESSAGE_AGE_SECONDS)
+        if (Instant.now().getEpochSecond() - event.getTimestamp() > MAX_REPORTED_MESSAGE_AGE_SECONDS)
         {
             return;
         }
@@ -314,7 +259,6 @@ public class ClanChatService
 
     private void onWelcome(JsonObject welcome)
     {
-        // First, so the history below is drawn with up-to-date ranks.
         rankIcons.onWelcome(welcome);
 
         JsonElement historyElement = welcome.get("history");
@@ -333,10 +277,10 @@ public class ClanChatService
             ? ChatMessageType.CLAN_CHAT
             : ChatMessageType.CLAN_GUEST_CHAT;
 
-        Map<String, List<Integer>> chatbox = linesInChatbox();
+        Map<String, List<Integer>> chatbox = chatboxLineTimesByKey();
         boolean added = false;
 
-        addingLines = true;
+        addingOwnLines = true;
         try
         {
             for (JsonElement element : history)
@@ -349,7 +293,7 @@ public class ClanChatService
                 JsonObject entry = element.getAsJsonObject();
                 boolean serverLine = "chat_message".equals(ValianceSocket.getString(entry, "type"));
                 JsonElement sentAt = entry.get("sent_at");
-                if (sentAt != null && sentAt.isJsonPrimitive() && isInChatbox(chatbox,
+                if (sentAt != null && sentAt.isJsonPrimitive() && isAlreadyInChatbox(chatbox,
                     serverLine ? "" : ValianceSocket.getString(entry, "rsn"),
                     ValianceSocket.getString(entry, "message"),
                     sentAt.getAsLong()))
@@ -363,13 +307,11 @@ public class ClanChatService
                 }
                 else
                 {
-                    addHistoryMessage(chatType, entry);
+                    addReplayedPlayerLine(chatType, entry);
                 }
                 added = true;
             }
 
-            // Only after lines this added: with everything still on screen,
-            // there is no history to end.
             if (added)
             {
                 client.addChatMessage(broadcastType(), "", HISTORY_END_MESSAGE, CLAN_NAME);
@@ -377,27 +319,23 @@ public class ClanChatService
         }
         finally
         {
-            addingLines = false;
+            addingOwnLines = false;
         }
     }
 
     private void onServerLine(JsonObject line)
     {
-        addingLines = true;
+        addingOwnLines = true;
         try
         {
             addServerLine(line);
         }
         finally
         {
-            addingLines = false;
+            addingOwnLines = false;
         }
     }
 
-    /**
-     * Adds a line the server sent, as the class comment describes. A replayed
-     * one carries sent_at, and is shown at that time.
-     */
     private void addServerLine(JsonObject line)
     {
         String message = ValianceSocket.getString(line, "message");
@@ -412,7 +350,7 @@ public class ClanChatService
             return;
         }
 
-        addedNodes.add(node);
+        ownLineNodes.add(node);
 
         JsonElement sentAt = line.get("sent_at");
         if (sentAt != null && sentAt.isJsonPrimitive())
@@ -421,11 +359,7 @@ public class ClanChatService
         }
     }
 
-    /**
-     * The icon the game shows beside an account's name, by the game's ironman
-     * setting, or nothing for a regular account or an unknown one.
-     */
-    private static String accountIconTag(JsonElement accountType)
+    private static String accountTypeIconTag(JsonElement accountType)
     {
         if (accountType == null || !accountType.isJsonPrimitive())
         {
@@ -459,7 +393,7 @@ public class ClanChatService
         return "<img=" + icon.getIndex() + ">";
     }
 
-    private void addHistoryMessage(ChatMessageType chatType, JsonObject entry)
+    private void addReplayedPlayerLine(ChatMessageType chatType, JsonObject entry)
     {
         String name = ValianceSocket.getString(entry, "rsn");
         String message = ValianceSocket.getString(entry, "message");
@@ -469,8 +403,6 @@ public class ClanChatService
             return;
         }
 
-        // The server already strips these; stripped again because whatever is
-        // added here is drawn straight into the chatbox.
         String cleanName = NON_NAME_CHARACTER.matcher(Text.removeTags(name)).replaceAll("");
         String cleanMessage = NON_ESCAPE_TAG.matcher(message).replaceAll("");
         if (cleanName.isEmpty() || cleanMessage.isEmpty())
@@ -478,14 +410,12 @@ public class ClanChatService
             return;
         }
 
-        // The game puts the account's icon into the name of a live message, so
-        // a replayed one is given the same.
-        String nameWithIcon = accountIconTag(entry.get("account_type")) + cleanName;
+        String nameWithIcon = accountTypeIconTag(entry.get("account_type")) + cleanName;
 
         MessageNode node = client.addChatMessage(chatType, nameWithIcon, cleanMessage, CLAN_NAME);
         if (node != null)
         {
-            addedNodes.add(node);
+            ownLineNodes.add(node);
             node.setTimestamp((int) (sentAt.getAsLong() / 1000));
         }
     }
