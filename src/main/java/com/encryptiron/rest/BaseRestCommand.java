@@ -158,7 +158,7 @@ public abstract class BaseRestCommand {
     
     public void onJsonResponse(Request request, JsonObject json)
     {
-        log.info("Received json response: " + json.toString());
+        log.debug("Received json response: " + json.toString());
 
         showServerMessages(json);
 
@@ -231,7 +231,7 @@ public abstract class BaseRestCommand {
 
     public void onTextResponse(Request request, String response)
     {
-        log.info("Received text response: " + response);
+        log.debug("Received text response: " + response);
 
         if (!config.debug())
             return;
@@ -248,7 +248,7 @@ public abstract class BaseRestCommand {
 
     public void onFailCodeResponse(Request request, Response response)
     {
-        log.info("Received failed code response: " + response.code());
+        log.warn("Received failed code response from " + request.url().encodedPath() + ": " + response.code());
 
         try
         {
@@ -258,7 +258,7 @@ public abstract class BaseRestCommand {
             JsonObject json = parser.parse(bodyString).getAsJsonObject();
             String error = json.get("string").getAsString();
 
-            log.debug("Error received when sending message: " + error);
+            log.warn("Error received when sending message: " + error);
         }
         catch(Exception ex)
         {
@@ -270,7 +270,7 @@ public abstract class BaseRestCommand {
 
     public void onRequestFailed(Request request, IOException exception)
     {
-        log.info("Failed to send request " + exception.getMessage());
+        log.warn("Failed to send request to " + request.url().encodedPath() + ": " + exception.getMessage());
         sendFailMessage();
     }
 

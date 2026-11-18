@@ -3,10 +3,15 @@ package com.encryptiron;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
-@ConfigGroup("encryptiron")
+@ConfigGroup(ValianceConfig.GROUP)
 public interface ValianceConfig extends Config
 {
+    String GROUP = "encryptiron";
+    String SHOW_VALIANCE_RANKS = "showValianceRanks";
+
     @ConfigItem(
         keyName = "chatMessageOnEventItemAccepted",
         name = "Event Accepted Chat Message",
@@ -49,5 +54,40 @@ public interface ValianceConfig extends Config
     default String valianceServerUrl()
     {
         return "valianceosrs.com";
+    }
+
+    @ConfigSection(
+        name = "Clan Chat",
+        description = "Valiance clan chat, history and event broadcasts.",
+        position = 5
+    )
+    String clanChatSection = "clanChat";
+
+    @Range(
+        min = 0,
+        max = 100
+    )
+    @ConfigItem(
+        keyName = "clanChatHistoryCount",
+        name = "Messages on log-in",
+        description = "How many recent Valiance clan chat messages to show when you log in. 0 shows none.",
+        position = 6,
+        section = clanChatSection
+    )
+    default int clanChatHistoryCount()
+    {
+        return 10;
+    }
+
+    @ConfigItem(
+        keyName = SHOW_VALIANCE_RANKS,
+        name = "Valiance ranks",
+        description = "Shows every Valiance rank a member holds beside their name in clan chat, in place of their in-game clan rank.",
+        position = 7,
+        section = clanChatSection
+    )
+    default boolean showValianceRanks()
+    {
+        return true;
     }
 }

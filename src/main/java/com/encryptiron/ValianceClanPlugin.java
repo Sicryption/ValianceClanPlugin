@@ -2,6 +2,9 @@ package com.encryptiron;
 
 import javax.inject.Inject;
 
+import com.encryptiron.chat.ClanChatService;
+import com.encryptiron.chat.ClanRankWidgets;
+import com.encryptiron.chat.RankIcons;
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
 import com.encryptiron.rest.OnBossKilled;
@@ -13,6 +16,7 @@ import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.PlayerChanged;
 import net.runelite.api.gameval.VarbitID;
@@ -55,6 +59,15 @@ public class ValianceClanPlugin extends Plugin
     private PopUpQueue popUpQueue;
 
     @Inject
+    private ClanChatService clanChatService;
+
+    @Inject
+    private RankIcons rankIcons;
+
+    @Inject
+    private ClanRankWidgets clanRankWidgets;
+
+    @Inject
     private EventBus eventBus;
 
     @Inject
@@ -76,6 +89,12 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(onBossKilled);
         eventBus.register(popUpQueue);
 
+        clanChatService.startUp();
+        rankIcons.startUp();
+        eventBus.register(clanChatService);
+        eventBus.register(rankIcons);
+        eventBus.register(clanRankWidgets);
+
         tryLoadPlayer();
     }
 
@@ -90,6 +109,12 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(popUpQueue);
         clientThread.invoke(popUpQueue::clear);
 
+        eventBus.unregister(clanChatService);
+        eventBus.unregister(rankIcons);
+        eventBus.unregister(clanRankWidgets);
+        clanChatService.shutDown();
+        clanRankWidgets.redrawRanks();
+
         MessageHeaderData.reset();
         sendCollectionLog.resetNumClogsAccordingToVarp();
     }
@@ -97,7 +122,8 @@ public class ValianceClanPlugin extends Plugin
     @Subscribe
     public void onPlayerChanged(PlayerChanged playerChanged)
     {
-        if (playerChanged.getPlayer().getId() == client.getLocalPlayer().getId())
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer != null && playerChanged.getPlayer().getId() == localPlayer.getId())
         {
             tryLoadPlayer();
         }

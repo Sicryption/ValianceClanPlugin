@@ -198,7 +198,7 @@ public class OnBossKilled extends PostCommand
     @Override
     String onSuccessResponseMessage()
     {
-        log.info("Sent onBossKilled to server");
+        log.debug("Sent onBossKilled to server");
         return "Sent Boss Killed message to the Valiance server!";
     }
 

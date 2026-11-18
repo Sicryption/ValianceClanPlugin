@@ -40,7 +40,7 @@ public class SendItemDrop extends PostCommand
         JsonObject itemDropObject = new JsonObject();
         itemDropObject.add("item_drop", itemDrop);
 
-        log.info("Sending item drop: " + itemDropObject.toString());
+        log.debug("Sending item drop: " + itemDropObject.toString());
 
         return itemDropObject;
     }
@@ -63,7 +63,7 @@ public class SendItemDrop extends PostCommand
 
         if (config.debug())
         {
-            onTextResponse(request, null);
+            onTextResponse(request, SERVER_SUCCESS_MESSAGE);
         }
     }
     

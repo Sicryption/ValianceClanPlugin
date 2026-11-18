@@ -102,7 +102,7 @@ public class SendCombatAchievements extends PostCommand
     {
         if (caInterfaceIds.contains(widgetLoaded.getGroupId()))
         {
-            log.info("CA widget loaded");
+            log.debug("CA widget loaded");
             if (openCaInterfaceIds.isEmpty())
             {
                 collectCombatAchievementDataFromVarbits();
