@@ -131,6 +131,8 @@ public class RankIcons
     private JsonObject savedRanks;
     private JsonObject savedIcons;
     private int revision;
+    // Whether any rank icon had no sprite when last looked at; see lowerIcons
+    private boolean iconsMissing;
 
     // Read off the client thread when building the hello.
     private volatile String ranksVersion;
@@ -421,24 +423,38 @@ public class RankIcons
      * higher than the in-game rank graphics they replace. The drop is set on
      * the sprite itself, and set again whenever the sprite has been replaced:
      * by an animation frame, or by RuneLite rebuilding the icons at log-in.
+     *
+     * Also redraws the chat once icons that were missing are back. The game
+     * measures a name by the icons it has when it lays the line out, so a line
+     * drawn while RuneLite was rebuilding them at log-in left no room for its
+     * rank icons, and the message ran over the name once they appeared.
      */
     private void lowerIcons()
     {
         IndexedSprite[] modIcons = client.getModIcons();
-        if (modIcons == null)
-        {
-            return;
-        }
+        boolean missing = modIcons == null;
 
         for (RankIcon icon : icons.values())
         {
             int index = chatIconManager.chatIconIndex(icon.iconId);
-            if (index >= 0 && index < modIcons.length && modIcons[index] != null
-                && modIcons[index].getOffsetY() != ICON_DROP)
+            if (modIcons == null || index < 0 || index >= modIcons.length || modIcons[index] == null)
+            {
+                missing = true;
+                continue;
+            }
+
+            if (modIcons[index].getOffsetY() != ICON_DROP)
             {
                 modIcons[index].setOffsetY(ICON_DROP);
             }
         }
+
+        if (iconsMissing && !missing)
+        {
+            log.debug("Valiance rank icons are back, redrawing the chat");
+            client.refreshChat();
+        }
+        iconsMissing = missing;
     }
 
     @Subscribe
