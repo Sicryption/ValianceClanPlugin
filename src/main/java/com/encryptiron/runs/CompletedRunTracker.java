@@ -58,9 +58,9 @@ public class CompletedRunTracker
     private static final Set<String> TIMED_FROM_FIRST_DAMAGE = Set.of(
         "Corporeal Beast",
         "Giant Mole",
-        "Kalphite Queen",
-        "King Black Dragon");
+        "Kalphite Queen");
     private static final Set<String> TIMED_FROM_SPAWN = Set.of(
+        "King Black Dragon",
         "General Graardor",
         "Commander Zilyana",
         "Kree'arra",
