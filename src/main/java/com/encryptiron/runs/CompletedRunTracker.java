@@ -54,6 +54,8 @@ public class CompletedRunTracker
     private static final Pattern KILL_COUNT = Pattern.compile("Your (?:completion count for |subdued |completed )?(?:<col=[0-9a-f]{6}>)?.+?(?:</col>)? (?:(?:kill|harvest|lap|completion|success|Total Ticket) )?(?:count )?is: ?(?:<col=[0-9a-f]{6}>|@.+?@)(?<count>[0-9,]+)</col>");
     private static final Pattern PLAYER_NAME = Pattern.compile("[A-Za-z0-9 _-]{1,12}");
     private static final Pattern ONLY_DIGITS = Pattern.compile("[0-9]+");
+    private static final Set<String> PLUGIN_TIMED_NPC_NAMES = Set.of("Corporeal Beast");
+    private static final long MS_PER_TICK = 600;
 
     private static final int[] PARTY_NAME_VARCS = {
         VarClientID.TOB_CLIENT_NAME0,
@@ -81,6 +83,7 @@ public class CompletedRunTracker
     private SetupSnapshots setupSnapshots;
 
     private final Map<String, PlayerSightings> sightingsByPlayerName = new HashMap<>();
+    private final Map<String, Integer> pluginTimerStartTickByNpcName = new HashMap<>();
     private final Deque<GameLine> gameLines = new ArrayDeque<>();
     private final Deque<KillCountChange> killCountChanges = new ArrayDeque<>();
     private PendingRun pendingRun;
@@ -92,6 +95,7 @@ public class CompletedRunTracker
         long nowMs = System.currentTimeMillis();
 
         recordSightings(nowMs);
+        startPluginTimers(tick);
         setupSnapshots.record(nowMs);
 
         if (pendingRun != null && tick > pendingRun.killCountLine.tick
@@ -143,13 +147,18 @@ public class CompletedRunTracker
                 sendPendingRun();
             }
 
+            String timedNpcName = timedNpcNameIn(message);
+            Integer timerStartTick = timedNpcName == null ? null : pluginTimerStartTickByNpcName.remove(timedNpcName);
+
             pendingRun = new PendingRun(
                 gameLine,
                 Integer.parseInt(killCountMatcher.group("count").replace(",", "")),
                 client.getAccountHash(),
                 client.getWorld(),
                 client.getVarbitValue(VarbitID.TOA_CLIENT_RAID_LEVEL),
-                localPlayerName());
+                localPlayerName(),
+                timerStartTick == null ? null : timedNpcName,
+                timerStartTick == null ? 0 : (gameLine.tick - timerStartTick) * MS_PER_TICK);
         }
     }
 
@@ -212,6 +221,42 @@ public class CompletedRunTracker
         recordChambersPartyPanel(nowMs);
     }
 
+    private void startPluginTimers(int tick)
+    {
+        for (NPC npc : client.getTopLevelWorldView().npcs())
+        {
+            String npcName = cleanName(npc.getName());
+            if (npcName == null
+                || !PLUGIN_TIMED_NPC_NAMES.contains(npcName)
+                || pluginTimerStartTickByNpcName.containsKey(npcName))
+            {
+                continue;
+            }
+
+            boolean belowFullHealth = npc.getHealthScale() > 0
+                && npc.getHealthRatio() >= 0
+                && npc.getHealthRatio() < npc.getHealthScale();
+            if (belowFullHealth)
+            {
+                pluginTimerStartTickByNpcName.put(npcName, tick);
+            }
+        }
+    }
+
+    private static String timedNpcNameIn(String killCountMessage)
+    {
+        String text = Text.removeTags(killCountMessage);
+        for (String npcName : PLUGIN_TIMED_NPC_NAMES)
+        {
+            if (text.contains(npcName))
+            {
+                return npcName;
+            }
+        }
+
+        return null;
+    }
+
     private void recordChambersPartyPanel(long nowMs)
     {
         Widget partyList = client.getWidget(InterfaceID.RaidsSidepanel.LIST);
@@ -255,6 +300,11 @@ public class CompletedRunTracker
             {
                 longestCompletionTimeMs = Math.max(longestCompletionTimeMs, longestTimeIn(gameLine.message));
             }
+        }
+
+        if (longestCompletionTimeMs == 0)
+        {
+            longestCompletionTimeMs = run.pluginTimerMs;
         }
 
         if (longestCompletionTimeMs == 0)
@@ -312,6 +362,14 @@ public class CompletedRunTracker
         completedRun.add("kill_count_changes", killCounts);
         completedRun.add("varbits", varbits);
         completedRun.add("players", players);
+
+        if (run.pluginTimerNpcName != null)
+        {
+            JsonObject pluginTimer = new JsonObject();
+            pluginTimer.addProperty("npc", run.pluginTimerNpcName);
+            pluginTimer.addProperty("duration_ms", run.pluginTimerMs);
+            completedRun.add("plugin_timer", pluginTimer);
+        }
         completedRun.add("setup", setupSnapshots.setupAt(endMs - longestCompletionTimeMs));
 
         sendCompletedRun.send(completedRun);
@@ -415,8 +473,11 @@ public class CompletedRunTracker
         private final int world;
         private final int toaRaidLevel;
         private final String localPlayerName;
+        private final String pluginTimerNpcName;
+        private final long pluginTimerMs;
 
-        private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, String localPlayerName)
+        private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, String localPlayerName,
+            String pluginTimerNpcName, long pluginTimerMs)
         {
             this.killCountLine = killCountLine;
             this.killCount = killCount;
@@ -424,6 +485,8 @@ public class CompletedRunTracker
             this.world = world;
             this.toaRaidLevel = toaRaidLevel;
             this.localPlayerName = localPlayerName;
+            this.pluginTimerNpcName = pluginTimerNpcName;
+            this.pluginTimerMs = pluginTimerMs;
         }
     }
 }
