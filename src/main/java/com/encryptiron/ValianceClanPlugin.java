@@ -7,6 +7,7 @@ import com.encryptiron.chat.ClanRankWidgets;
 import com.encryptiron.chat.RankIcons;
 import com.encryptiron.rest.MessageHeaderData;
 import com.encryptiron.rest.NewCollectionLogEntry;
+import com.encryptiron.rest.NewCombatAchievement;
 import com.encryptiron.rest.OnBossKilled;
 import com.encryptiron.rest.SendCollectionLog;
 import com.encryptiron.rest.SendCombatAchievements;
@@ -53,6 +54,9 @@ public class ValianceClanPlugin extends Plugin
     public NewCollectionLogEntry newClogEntry;
 
     @Inject
+    public NewCombatAchievement newCombatAchievement;
+
+    @Inject
     public OnBossKilled onBossKilled;
 
     @Inject
@@ -86,6 +90,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(sendCombatAchievements);
         eventBus.register(sendItemDrop);
         eventBus.register(newClogEntry);
+        eventBus.register(newCombatAchievement);
         eventBus.register(onBossKilled);
         eventBus.register(popUpQueue);
 
@@ -105,6 +110,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(sendCombatAchievements);
         eventBus.unregister(sendItemDrop);
         eventBus.unregister(newClogEntry);
+        eventBus.unregister(newCombatAchievement);
         eventBus.unregister(onBossKilled);
         eventBus.unregister(popUpQueue);
         clientThread.invoke(popUpQueue::clear);
