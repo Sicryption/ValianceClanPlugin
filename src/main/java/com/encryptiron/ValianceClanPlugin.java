@@ -11,6 +11,7 @@ import com.encryptiron.rest.OnBossKilled;
 import com.encryptiron.rest.SendCollectionLog;
 import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
+import com.encryptiron.runs.AdventureLogReader;
 import com.encryptiron.runs.CompletedRunTracker;
 import com.google.inject.Provides;
 
@@ -60,6 +61,9 @@ public class ValianceClanPlugin extends Plugin
     public CompletedRunTracker completedRunTracker;
 
     @Inject
+    public AdventureLogReader adventureLogReader;
+
+    @Inject
     private PopUpQueue popUpQueue;
 
     @Inject
@@ -92,6 +96,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(newClogEntry);
         eventBus.register(onBossKilled);
         eventBus.register(completedRunTracker);
+        eventBus.register(adventureLogReader);
         eventBus.register(popUpQueue);
 
         clanChatService.startUp();
@@ -112,6 +117,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(newClogEntry);
         eventBus.unregister(onBossKilled);
         eventBus.unregister(completedRunTracker);
+        eventBus.unregister(adventureLogReader);
         eventBus.unregister(popUpQueue);
         clientThread.invoke(popUpQueue::clear);
 
