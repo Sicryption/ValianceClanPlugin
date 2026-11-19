@@ -29,6 +29,7 @@ import net.runelite.api.Player;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -54,7 +55,16 @@ public class CompletedRunTracker
     private static final Pattern KILL_COUNT = Pattern.compile("Your (?:completion count for |subdued |completed )?(?:<col=[0-9a-f]{6}>)?.+?(?:</col>)? (?:(?:kill|harvest|lap|completion|success|Total Ticket) )?(?:count )?is: ?(?:<col=[0-9a-f]{6}>|@.+?@)(?<count>[0-9,]+)</col>");
     private static final Pattern PLAYER_NAME = Pattern.compile("[A-Za-z0-9 _-]{1,12}");
     private static final Pattern ONLY_DIGITS = Pattern.compile("[0-9]+");
-    private static final Set<String> PLUGIN_TIMED_NPC_NAMES = Set.of("Corporeal Beast");
+    private static final Set<String> TIMED_FROM_FIRST_DAMAGE = Set.of(
+        "Corporeal Beast",
+        "Giant Mole",
+        "Kalphite Queen",
+        "King Black Dragon");
+    private static final Set<String> TIMED_FROM_SPAWN = Set.of(
+        "General Graardor",
+        "Commander Zilyana",
+        "Kree'arra",
+        "K'ril Tsutsaroth");
     private static final long MS_PER_TICK = 600;
 
     private static final int[] PARTY_NAME_VARCS = {
@@ -163,6 +173,16 @@ public class CompletedRunTracker
     }
 
     @Subscribe
+    public void onNpcSpawned(NpcSpawned npcSpawned)
+    {
+        String npcName = timedNpcName(npcSpawned.getNpc().getName(), TIMED_FROM_SPAWN);
+        if (npcName != null)
+        {
+            pluginTimerStartTickByNpcName.put(npcName, client.getTickCount());
+        }
+    }
+
+    @Subscribe
     public void onVarbitChanged(VarbitChanged varbitChanged)
     {
         if (varbitChanged.getVarbitId() != -1 || client.getLocalPlayer() == null)
@@ -225,10 +245,8 @@ public class CompletedRunTracker
     {
         for (NPC npc : client.getTopLevelWorldView().npcs())
         {
-            String npcName = cleanName(npc.getName());
-            if (npcName == null
-                || !PLUGIN_TIMED_NPC_NAMES.contains(npcName)
-                || pluginTimerStartTickByNpcName.containsKey(npcName))
+            String npcName = timedNpcName(npc.getName(), TIMED_FROM_FIRST_DAMAGE);
+            if (npcName == null || pluginTimerStartTickByNpcName.containsKey(npcName))
             {
                 continue;
             }
@@ -243,12 +261,31 @@ public class CompletedRunTracker
         }
     }
 
-    private static String timedNpcNameIn(String killCountMessage)
+    private static String timedNpcName(String npcName, Set<String> timedNpcNames)
     {
-        String text = Text.removeTags(killCountMessage);
-        for (String npcName : PLUGIN_TIMED_NPC_NAMES)
+        String cleaned = cleanName(npcName);
+        if (cleaned == null)
         {
-            if (text.contains(npcName))
+            return null;
+        }
+
+        for (String timedNpcName : timedNpcNames)
+        {
+            if (timedNpcName.equalsIgnoreCase(cleaned))
+            {
+                return timedNpcName;
+            }
+        }
+
+        return null;
+    }
+
+    private String timedNpcNameIn(String killCountMessage)
+    {
+        String text = Text.removeTags(killCountMessage).toLowerCase();
+        for (String npcName : pluginTimerStartTickByNpcName.keySet())
+        {
+            if (text.contains(npcName.toLowerCase()))
             {
                 return npcName;
             }
