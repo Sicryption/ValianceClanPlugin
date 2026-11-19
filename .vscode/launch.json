@@ -10,6 +10,7 @@
             "request": "launch",
             "mainClass": "com.encryptiron.ValianceClanPluginTest",
             "projectName": "valianceclanplugin",
+            "vmArgs": "-ea -da:net.runelite.client.plugins.gpu...",
             "args": "--developer-mode"
         },
     ]
