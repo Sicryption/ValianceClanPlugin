@@ -25,8 +25,9 @@ import net.runelite.client.util.Text;
 public class StatisticBoardReader
 {
     private static final int MOST_COMPONENTS_PER_INTERFACE = 512;
-    private static final Pattern PERSONAL = Pattern.compile("(?i)^personal\\b.*");
-    private static final Pattern TIME_ONLY = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
+    private static final Pattern PERSONAL_LINE = Pattern.compile("(?im)^\\s*personal\\b");
+    private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
+    private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
 
     @Inject
     private Client client;
@@ -67,15 +68,17 @@ public class StatisticBoardReader
         boolean hasTime = false;
         for (Widget widget : widgets)
         {
-            String text = widget.getText() == null ? "" : Text.removeTags(widget.getText()).replace((char) 0xA0, ' ').trim();
+            String text = widget.getText() == null
+                ? ""
+                : Text.removeTags(LINE_BREAK.matcher(widget.getText()).replaceAll("\n")).replace((char) 0xA0, ' ').trim();
             Point location = widget.getCanvasLocation();
             if (text.isEmpty() || widget.isHidden() || location == null)
             {
                 continue;
             }
 
-            hasPersonalLabel |= PERSONAL.matcher(text).matches();
-            hasTime |= TIME_ONLY.matcher(text).matches();
+            hasPersonalLabel |= PERSONAL_LINE.matcher(text).find();
+            hasTime |= TIME.matcher(text).find();
 
             JsonObject entry = new JsonObject();
             entry.addProperty("text", text);
