@@ -77,6 +77,9 @@ public class CompletedRunTracker
     @Inject
     private SendCompletedRun sendCompletedRun;
 
+    @Inject
+    private SetupSnapshots setupSnapshots;
+
     private final Map<String, PlayerSightings> sightingsByPlayerName = new HashMap<>();
     private final Deque<GameLine> gameLines = new ArrayDeque<>();
     private final Deque<KillCountChange> killCountChanges = new ArrayDeque<>();
@@ -89,6 +92,7 @@ public class CompletedRunTracker
         long nowMs = System.currentTimeMillis();
 
         recordSightings(nowMs);
+        setupSnapshots.record(nowMs);
 
         if (pendingRun != null && tick > pendingRun.killCountLine.tick
             && (killCountVarpConfirmsPendingRun() || tick >= pendingRun.killCountLine.tick + MOST_TICKS_TO_WAIT_FOR_KILL_COUNT_VARP))
@@ -308,6 +312,7 @@ public class CompletedRunTracker
         completedRun.add("kill_count_changes", killCounts);
         completedRun.add("varbits", varbits);
         completedRun.add("players", players);
+        completedRun.add("setup", setupSnapshots.setupAt(endMs - longestCompletionTimeMs));
 
         sendCompletedRun.send(completedRun);
     }
@@ -324,6 +329,7 @@ public class CompletedRunTracker
             killCountChanges.removeFirst();
         }
 
+        setupSnapshots.dropOlderThan(cutoffMs);
         sightingsByPlayerName.values().forEach(sightings -> sightings.dropEndedBefore(cutoffMs));
         sightingsByPlayerName.values().removeIf(PlayerSightings::isEmpty);
     }
