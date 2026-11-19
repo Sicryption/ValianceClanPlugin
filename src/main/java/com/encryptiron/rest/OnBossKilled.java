@@ -124,6 +124,11 @@ public class OnBossKilled extends PostCommand
     private int bossKillCount;
     private boolean sendNextTick = false;
 
+    public static String bossNameForVarp(int varpId)
+    {
+        return varpIdToBossName.get(varpId);
+    }
+
     @Override
     String endpoint() {
         return "/api/member/on_boss_killed";

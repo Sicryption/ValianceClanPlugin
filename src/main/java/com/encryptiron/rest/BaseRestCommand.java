@@ -55,15 +55,6 @@ public abstract class BaseRestCommand {
 
     private void writeMessageToServer(JsonObject body)
     {
-        if (MessageHeaderData.getPlayerName() == null)
-        {
-            // The player hasn't fully logged in yet, this means this message is the server catching us up
-            // on what the player has, after login / hop. We can skip sending this message as we don't care about it.
-            return;
-        }
-
-        MessageHeaderData.setProfileType(RuneScapeProfileType.getCurrent(client));
-
         URL url;
         try
         {
@@ -73,15 +64,12 @@ public abstract class BaseRestCommand {
             log.error("MalformedURL : " + e.getMessage());
             return;
         }
-    
-        JsonObject header = MessageHeaderData.getMessageHeaderJson();
-        body.add("header", header);
 
         RequestBody requestBody = RequestBody.create(APPLICATION_JSON, body.toString());
 
         Request httpRequest = new Builder()
             .url(url)
-            .header("User-Agent", "ValiancePlugin - " + MessageHeaderData.getPlayerName())
+            .header("User-Agent", "ValiancePlugin - " + body.getAsJsonObject("header").get("player_name").getAsString())
             .post(requestBody)
             .build();
 
@@ -135,7 +123,17 @@ public abstract class BaseRestCommand {
     {
         // Prepare the body outside of the thread, in case there are any delays
         JsonObject body = body();
-        
+
+        if (MessageHeaderData.getPlayerName() == null)
+        {
+            // The player hasn't fully logged in yet, this means this message is the server catching us up
+            // on what the player has, after login / hop. We can skip sending this message as we don't care about it.
+            return;
+        }
+
+        MessageHeaderData.setProfileType(RuneScapeProfileType.getCurrent(client));
+        body.add("header", MessageHeaderData.getMessageHeaderJson());
+
         // We want to send the message in a separate thread so that we 
         // don't block the game client while waiting for the response
         Thread sendThread = new Thread(() -> {
