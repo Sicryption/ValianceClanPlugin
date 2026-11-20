@@ -35,7 +35,6 @@ public class StatisticBoardReader
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
     private static final int FULLY_TRANSPARENT = 255;
-    private static final int UNCHANGED_READS_BEFORE_SENDING = 2;
 
     @Inject
     private Client client;
@@ -47,8 +46,6 @@ public class StatisticBoardReader
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
     private final Map<Integer, Map<Widget, WidgetAppearance>> widgetAppearancesByInterface = new HashMap<>();
-    private final Map<Integer, String> lastReadBoardByInterface = new HashMap<>();
-    private final Map<Integer, Integer> unchangedReadsByInterface = new HashMap<>();
     private long boardReads;
 
     @Subscribe
@@ -65,8 +62,6 @@ public class StatisticBoardReader
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
         widgetAppearancesByInterface.keySet().retainAll(openBoards);
-        lastReadBoardByInterface.keySet().retainAll(openBoards);
-        unchangedReadsByInterface.keySet().retainAll(openBoards);
         for (int interfaceId : openBoards)
         {
             readBoard(interfaceId);
@@ -179,11 +174,7 @@ public class StatisticBoardReader
         }
 
         String board = texts.toString();
-        int unchangedReads = board.equals(lastReadBoardByInterface.put(interfaceId, board))
-            ? unchangedReadsByInterface.merge(interfaceId, 1, Integer::sum)
-            : 0;
-        unchangedReadsByInterface.put(interfaceId, unchangedReads);
-        if (unchangedReads >= UNCHANGED_READS_BEFORE_SENDING && !board.equals(lastSentBoardByInterface.get(interfaceId)))
+        if (!board.equals(lastSentBoardByInterface.get(interfaceId)))
         {
             lastSentBoardByInterface.put(interfaceId, board);
             sendStatisticBoard.send(texts);
