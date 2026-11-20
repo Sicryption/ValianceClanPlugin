@@ -9,6 +9,7 @@ import java.net.URL;
 import javax.inject.Inject;
 
 import com.encryptiron.PopUpQueue;
+import com.encryptiron.ServerAddress;
 import com.encryptiron.ValianceConfig;
 
 import lombok.extern.slf4j.Slf4j;
@@ -34,8 +35,6 @@ import com.google.gson.JsonParser;
 @Slf4j
 public abstract class BaseRestCommand {
     private static final MediaType APPLICATION_JSON = MediaType.parse("application/json");
-    private static final String MESSAGING_PROTOCOL = "http://";
-    private static final int PORT = 8080;
     protected static final String SERVER_SUCCESS_MESSAGE = "Success";
 
     @Inject
@@ -58,7 +57,7 @@ public abstract class BaseRestCommand {
         URL url;
         try
         {
-            url = new URI(MESSAGING_PROTOCOL + config.valianceServerUrl() + ":" + PORT + endpoint()).toURL();
+            url = new URI(ServerAddress.httpUrl(config.valianceServerUrl(), endpoint())).toURL();
         } catch (MalformedURLException | URISyntaxException e)
         {
             log.error("MalformedURL : " + e.getMessage());

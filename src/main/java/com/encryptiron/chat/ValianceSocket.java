@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import com.encryptiron.ServerAddress;
 import com.encryptiron.ValianceConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -31,7 +32,6 @@ import okhttp3.WebSocketListener;
 @Singleton
 public class ValianceSocket
 {
-    private static final int PORT = 8080;
     private static final String PATH = "/api/plugin/ws";
     private static final int NORMAL_CLOSURE = 1000;
     private static final int FIRST_NEVER_RETRY_CLOSE_CODE = 4000;
@@ -140,7 +140,7 @@ public class ValianceSocket
         }
 
         Request request = new Request.Builder()
-            .url("ws://" + config.valianceServerUrl() + ":" + PORT + PATH)
+            .url(ServerAddress.webSocketUrl(config.valianceServerUrl(), PATH))
             .header("User-Agent", "ValiancePlugin")
             .build();
 
