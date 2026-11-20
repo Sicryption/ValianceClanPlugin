@@ -28,6 +28,7 @@ import net.runelite.client.util.Text;
 public class StatisticBoardReader
 {
     private static final int MOST_COMPONENTS_PER_INTERFACE = 512;
+    private static final int TICKS_TO_RECOGNISE_A_BOARD = 10;
     private static final Pattern PERSONAL_LINE = Pattern.compile("(?im)^\\s*(?:personal|fastest|best)\\b");
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
@@ -38,31 +39,36 @@ public class StatisticBoardReader
     @Inject
     private SendStatisticBoard sendStatisticBoard;
 
-    private final Set<Integer> interfacesLoadedThisTick = new HashSet<>();
+    private final Map<Integer, Integer> ticksLeftToRecogniseByInterface = new HashMap<>();
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
 
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-        interfacesLoadedThisTick.add(widgetLoaded.getGroupId());
+        ticksLeftToRecogniseByInterface.put(widgetLoaded.getGroupId(), TICKS_TO_RECOGNISE_A_BOARD);
     }
 
     @Subscribe
     public void onGameTick(GameTick gameTick)
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
-        interfacesLoadedThisTick.addAll(openBoards);
-
-        for (int interfaceId : interfacesLoadedThisTick)
+        for (int interfaceId : openBoards)
         {
-            if (readBoard(interfaceId))
-            {
-                openBoards.add(interfaceId);
-            }
+            readBoard(interfaceId);
         }
 
-        interfacesLoadedThisTick.clear();
+        ticksLeftToRecogniseByInterface.keySet().removeAll(openBoards);
+        ticksLeftToRecogniseByInterface.entrySet().removeIf(interfaceTicks -> {
+            if (readBoard(interfaceTicks.getKey()))
+            {
+                openBoards.add(interfaceTicks.getKey());
+                return true;
+            }
+
+            interfaceTicks.setValue(interfaceTicks.getValue() - 1);
+            return interfaceTicks.getValue() <= 0;
+        });
     }
 
     private boolean readBoard(int interfaceId)
