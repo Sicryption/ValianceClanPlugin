@@ -35,6 +35,7 @@ public class StatisticBoardReader
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
     private static final int FULLY_TRANSPARENT = 255;
+    private static final int COVER_TO_TEXT_AREA = 9;
 
     @Inject
     private Client client;
@@ -45,6 +46,7 @@ public class StatisticBoardReader
     private final Map<Integer, Integer> ticksLeftToRecogniseByInterface = new HashMap<>();
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
+    private final Map<Integer, String> lastReadBoardByInterface = new HashMap<>();
     private final Map<Integer, Map<Widget, WidgetAppearance>> widgetAppearancesByInterface = new HashMap<>();
     private long boardReads;
 
@@ -62,6 +64,7 @@ public class StatisticBoardReader
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
         widgetAppearancesByInterface.keySet().retainAll(openBoards);
+        lastReadBoardByInterface.keySet().retainAll(openBoards);
         for (int interfaceId : openBoards)
         {
             readBoard(interfaceId);
@@ -179,14 +182,26 @@ public class StatisticBoardReader
             texts.add(entry);
         }
 
-        String board = texts.toString();
-        if (!board.equals(lastSentBoardByInterface.get(interfaceId)))
+        String board = boardContent(boardTexts);
+        boolean unchangedSinceLastRead = board.equals(lastReadBoardByInterface.put(interfaceId, board));
+        if (unchangedSinceLastRead && !board.equals(lastSentBoardByInterface.get(interfaceId)))
         {
             lastSentBoardByInterface.put(interfaceId, board);
             sendStatisticBoard.send(texts);
         }
 
         return true;
+    }
+
+    private static String boardContent(List<BoardText> boardTexts)
+    {
+        List<String> content = new ArrayList<>();
+        for (BoardText boardText : boardTexts)
+        {
+            content.add(boardText.text + "|" + boardText.textColor + "|" + boardText.background);
+        }
+        Collections.sort(content);
+        return String.join("\n", content);
     }
 
     private static class BoardText
@@ -281,13 +296,16 @@ public class StatisticBoardReader
         }
 
         Rectangle bounds = widget.getBounds();
+        long textArea = (long) bounds.width * bounds.height;
         int centreX = bounds.x + bounds.width / 2;
         int centreY = bounds.y + bounds.height / 2;
         for (Widget cover : covers)
         {
+            Rectangle coverBounds = cover.getBounds();
             if (appearances.get(cover).readNumber > appearedOnRead
                 && !ancestors.contains(cover)
-                && cover.getBounds().contains(centreX, centreY))
+                && (long) coverBounds.width * coverBounds.height >= COVER_TO_TEXT_AREA * textArea
+                && coverBounds.contains(centreX, centreY))
             {
                 return true;
             }
@@ -306,6 +324,11 @@ public class StatisticBoardReader
         Rectangle bounds = widget.getBounds();
         for (Widget ancestor = widget.getParent(); ancestor != null; ancestor = ancestor.getParent())
         {
+            if (ancestor.getScrollHeight() > 0)
+            {
+                return true;
+            }
+
             if (!bounds.intersects(ancestor.getBounds()))
             {
                 return false;
