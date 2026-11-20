@@ -31,7 +31,7 @@ public class StatisticBoardReader
 {
     private static final int MOST_COMPONENTS_PER_INTERFACE = 512;
     private static final int TICKS_TO_RECOGNISE_A_BOARD = 10;
-    private static final Pattern PERSONAL_LINE = Pattern.compile("(?im)^\\s*(?:personal|fastest|best)\\b");
+    private static final Pattern PERSONAL_LINE = Pattern.compile("(?im)^\\s*(?:personal|fastest|best|your best)\\b");
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
     private static final int FULLY_TRANSPARENT = 255;
