@@ -218,7 +218,7 @@ public class ClanChatService
     @Subscribe
     public void onChatMessage(ChatMessage event)
     {
-        if (addingServerLines)
+        if (addingServerLines || !config.shareClanChat())
         {
             return;
         }

@@ -63,6 +63,19 @@ public interface ValianceConfig extends Config
     )
     String clanChatSection = "clanChat";
 
+    @ConfigItem(
+        keyName = "shareClanChat",
+        name = "Share my clan chat",
+        description = "Sends the messages you type in the Valiance clan chat to the Valiance server, so members who log in later see them in chat history and staff can review the chat log. Off unless you turn it on.",
+        warning = "This feature submits the messages you type in the Valiance clan chat to a 3rd-party server not controlled or verified by RuneLite developers.",
+        position = 6,
+        section = clanChatSection
+    )
+    default boolean shareClanChat()
+    {
+        return false;
+    }
+
     @Range(
         min = 0,
         max = 100
@@ -71,7 +84,7 @@ public interface ValianceConfig extends Config
         keyName = "clanChatHistoryCount",
         name = "Messages on log-in",
         description = "How many recent Valiance clan chat messages to show when you log in. 0 shows none.",
-        position = 6,
+        position = 7,
         section = clanChatSection
     )
     default int clanChatHistoryCount()
@@ -83,7 +96,7 @@ public interface ValianceConfig extends Config
         keyName = SHOW_VALIANCE_RANKS,
         name = "Valiance ranks",
         description = "Shows every Valiance rank a member holds beside their name in clan chat, in place of their in-game clan rank.",
-        position = 7,
+        position = 8,
         section = clanChatSection
     )
     default boolean showValianceRanks()
