@@ -33,7 +33,9 @@ import net.runelite.client.plugins.PluginDescriptor;
 @Slf4j
 @PluginDescriptor(
     name = "Valiance",
-    description="Valiance clan plugin to help automate events."
+    description="Valiance clan plugin to help automate events.",
+    internalName = "valiance-clan",
+    legacyDataDirectory = "valiance"
 )
 public class ValianceClanPlugin extends Plugin
 {
@@ -105,7 +107,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(popUpQueue);
 
         clanChatService.startUp();
-        rankIcons.startUp();
+        rankIcons.startUp(getPluginDirectory());
         eventBus.register(clanChatService);
         eventBus.register(rankIcons);
         eventBus.register(clanRankWidgets);

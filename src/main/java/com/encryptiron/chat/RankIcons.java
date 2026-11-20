@@ -2,10 +2,7 @@ package com.encryptiron.chat;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -36,10 +33,10 @@ import net.runelite.api.IndexedSprite;
 import net.runelite.api.MessageNode;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.ScriptCallbackEvent;
-import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ChatIconManager;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.Text;
 
@@ -48,7 +45,7 @@ import net.runelite.client.util.Text;
 public class RankIcons
 {
     private static final String CHAT_MESSAGE_BUILDING = "chatMessageBuilding";
-    private static final File CACHE_FILE = new File(new File(RuneLite.RUNELITE_DIR, "valiance"), "ranks.json");
+    private static final String SAVED_RANKS_FILE_NAME = "ranks.json";
 
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
     private static final int NEAR_BLACK = 0x010101;
@@ -111,10 +108,12 @@ public class RankIcons
     private boolean iconSpritesWereMissing;
 
     private volatile String ranksVersion;
+    private Filepath savedRanksFile;
     private volatile String iconsVersion;
 
-    public void startUp()
+    public void startUp(Filepath dataDirectory)
     {
+        savedRanksFile = dataDirectory.joinSegment(SAVED_RANKS_FILE_NAME);
         socket.setHandler("ranks", body -> applyRanks(body, true));
         socket.setHandler("icons", body -> applyIcons(body, true));
         executor.execute(this::loadSaved);
@@ -147,15 +146,15 @@ public class RankIcons
 
     private void loadSaved()
     {
-        if (!CACHE_FILE.exists())
+        if (savedRanksFile == null || !savedRanksFile.exists())
         {
             return;
         }
 
         JsonObject saved;
-        try
+        try (var reader = savedRanksFile.openReader())
         {
-            saved = gson.fromJson(new String(Files.readAllBytes(CACHE_FILE.toPath()), StandardCharsets.UTF_8), JsonObject.class);
+            saved = gson.fromJson(reader, JsonObject.class);
         }
         catch (IOException | JsonParseException ex)
         {
@@ -194,12 +193,18 @@ public class RankIcons
         }
 
         String json = gson.toJson(saved);
+        Filepath file = savedRanksFile;
+        if (file == null)
+        {
+            return;
+        }
+
         executor.execute(() ->
         {
             try
             {
-                Files.createDirectories(CACHE_FILE.getParentFile().toPath());
-                Files.write(CACHE_FILE.toPath(), json.getBytes(StandardCharsets.UTF_8));
+                file.getParent().createDirectories();
+                file.write(json);
             }
             catch (IOException ex)
             {
