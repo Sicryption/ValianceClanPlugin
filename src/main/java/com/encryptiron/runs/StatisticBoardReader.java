@@ -23,6 +23,7 @@ import net.runelite.api.Point;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.Text;
 
@@ -34,6 +35,7 @@ public class StatisticBoardReader
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
     private static final int FULLY_TRANSPARENT = 255;
+    private static final int UNCHANGED_READS_BEFORE_SENDING = 2;
 
     @Inject
     private Client client;
@@ -45,6 +47,8 @@ public class StatisticBoardReader
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
     private final Map<Integer, Map<Widget, TextAppearance>> textAppearancesByInterface = new HashMap<>();
+    private final Map<Integer, String> lastReadBoardByInterface = new HashMap<>();
+    private final Map<Integer, Integer> unchangedReadsByInterface = new HashMap<>();
     private long boardReads;
 
     @Subscribe
@@ -61,6 +65,8 @@ public class StatisticBoardReader
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
         textAppearancesByInterface.keySet().retainAll(openBoards);
+        lastReadBoardByInterface.keySet().retainAll(openBoards);
+        unchangedReadsByInterface.keySet().retainAll(openBoards);
         for (int interfaceId : openBoards)
         {
             readBoard(interfaceId);
@@ -104,7 +110,7 @@ public class StatisticBoardReader
                 ? ""
                 : Text.removeTags(LINE_BREAK.matcher(widget.getText()).replaceAll("\n")).replace((char) 0xA0, ' ').trim();
             Point location = widget.getCanvasLocation();
-            if (text.isEmpty() || location == null || !isDrawn(widget))
+            if (widget.getType() != WidgetType.TEXT || location == null || !isDrawn(widget))
             {
                 continue;
             }
@@ -127,6 +133,7 @@ public class StatisticBoardReader
         textAppearancesByInterface.put(interfaceId, textAppearances);
 
         List<BoardText> boardTexts = new ArrayList<>(topmostTextByPosition.values());
+        boardTexts.removeIf(boardText -> boardText.text.isEmpty());
         for (BoardText boardText : boardTexts)
         {
             hasPersonalLabel |= PERSONAL_LINE.matcher(boardText.text).find();
@@ -154,7 +161,11 @@ public class StatisticBoardReader
         }
 
         String board = texts.toString();
-        if (!board.equals(lastSentBoardByInterface.get(interfaceId)))
+        int unchangedReads = board.equals(lastReadBoardByInterface.put(interfaceId, board))
+            ? unchangedReadsByInterface.merge(interfaceId, 1, Integer::sum)
+            : 0;
+        unchangedReadsByInterface.put(interfaceId, unchangedReads);
+        if (unchangedReads >= UNCHANGED_READS_BEFORE_SENDING && !board.equals(lastSentBoardByInterface.get(interfaceId)))
         {
             lastSentBoardByInterface.put(interfaceId, board);
             sendStatisticBoard.send(texts);
