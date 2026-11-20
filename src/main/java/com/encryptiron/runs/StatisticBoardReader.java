@@ -1,9 +1,12 @@
 package com.encryptiron.runs;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -36,6 +39,7 @@ public class StatisticBoardReader
     private SendStatisticBoard sendStatisticBoard;
 
     private final Set<Integer> interfacesLoadedThisTick = new HashSet<>();
+    private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
 
     @Subscribe
@@ -47,15 +51,21 @@ public class StatisticBoardReader
     @Subscribe
     public void onGameTick(GameTick gameTick)
     {
+        openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
+        interfacesLoadedThisTick.addAll(openBoards);
+
         for (int interfaceId : interfacesLoadedThisTick)
         {
-            readBoard(interfaceId);
+            if (readBoard(interfaceId))
+            {
+                openBoards.add(interfaceId);
+            }
         }
 
         interfacesLoadedThisTick.clear();
     }
 
-    private void readBoard(int interfaceId)
+    private boolean readBoard(int interfaceId)
     {
         Set<Widget> widgets = Collections.newSetFromMap(new IdentityHashMap<>());
         for (int componentId = 0; componentId < MOST_COMPONENTS_PER_INTERFACE; componentId++)
@@ -63,7 +73,7 @@ public class StatisticBoardReader
             collect(client.getWidget(interfaceId, componentId), widgets);
         }
 
-        JsonArray texts = new JsonArray();
+        List<BoardText> boardTexts = new ArrayList<>();
         boolean hasPersonalLabel = false;
         boolean hasTime = false;
         for (Widget widget : widgets)
@@ -79,22 +89,50 @@ public class StatisticBoardReader
 
             hasPersonalLabel |= PERSONAL_LINE.matcher(text).find();
             hasTime |= TIME.matcher(text).find();
+            boardTexts.add(new BoardText(text, location.getX() + widget.getWidth() / 2, location.getY()));
+        }
 
+        if (!hasPersonalLabel || !hasTime)
+        {
+            return false;
+        }
+
+        boardTexts.sort(Comparator.comparingInt((BoardText boardText) -> boardText.y)
+            .thenComparingInt(boardText -> boardText.x)
+            .thenComparing(boardText -> boardText.text));
+
+        JsonArray texts = new JsonArray();
+        for (BoardText boardText : boardTexts)
+        {
             JsonObject entry = new JsonObject();
-            entry.addProperty("text", text);
-            entry.addProperty("x", location.getX() + widget.getWidth() / 2);
-            entry.addProperty("y", location.getY());
+            entry.addProperty("text", boardText.text);
+            entry.addProperty("x", boardText.x);
+            entry.addProperty("y", boardText.y);
             texts.add(entry);
         }
 
-        String boardText = texts.toString();
-        if (!hasPersonalLabel || !hasTime || boardText.equals(lastSentBoardByInterface.get(interfaceId)))
+        String board = texts.toString();
+        if (!board.equals(lastSentBoardByInterface.get(interfaceId)))
         {
-            return;
+            lastSentBoardByInterface.put(interfaceId, board);
+            sendStatisticBoard.send(texts);
         }
 
-        lastSentBoardByInterface.put(interfaceId, boardText);
-        sendStatisticBoard.send(texts);
+        return true;
+    }
+
+    private static class BoardText
+    {
+        private final String text;
+        private final int x;
+        private final int y;
+
+        private BoardText(String text, int x, int y)
+        {
+            this.text = text;
+            this.x = x;
+            this.y = y;
+        }
     }
 
     private static void collect(Widget widget, Set<Widget> widgets)
