@@ -217,7 +217,7 @@ public class ClanRankWidgets
             {
                 texts.add(child);
             }
-            else if (isClanRankGraphic(child))
+            else if (!child.isHidden() && isClanRankGraphic(child))
             {
                 rankGraphics.add(child);
             }
