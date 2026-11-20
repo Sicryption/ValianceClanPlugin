@@ -66,6 +66,19 @@ public class CompletedRunTracker
         "Kree'arra",
         "K'ril Tsutsaroth");
     private static final long MS_PER_TICK = 600;
+    private static final int NO_KILL_COUNT = -1;
+    private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
+    private static final int[] TOB_PARTY_SLOTS = {
+        VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1, VarbitID.TOB_CLIENT_P2, VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4,
+    };
+    private static final int[] TOA_PARTY_SLOTS = {
+        VarbitID.TOA_CLIENT_P0, VarbitID.TOA_CLIENT_P1, VarbitID.TOA_CLIENT_P2, VarbitID.TOA_CLIENT_P3,
+        VarbitID.TOA_CLIENT_P4, VarbitID.TOA_CLIENT_P5, VarbitID.TOA_CLIENT_P6, VarbitID.TOA_CLIENT_P7,
+    };
+    private static final int[] TFA_PARTY_SLOTS = {
+        VarbitID.TFA_CLIENT_P0, VarbitID.TFA_CLIENT_P1, VarbitID.TFA_CLIENT_P2, VarbitID.TFA_CLIENT_P3,
+        VarbitID.TFA_CLIENT_P4, VarbitID.TFA_CLIENT_P5, VarbitID.TFA_CLIENT_P6, VarbitID.TFA_CLIENT_P7,
+    };
 
     private static final int[] PARTY_NAME_VARCS = {
         VarClientID.TOB_CLIENT_NAME0,
@@ -160,16 +173,50 @@ public class CompletedRunTracker
             String timedNpcName = timedNpcNameIn(message);
             Integer timerStartTick = timedNpcName == null ? null : pluginTimerStartTickByNpcName.remove(timedNpcName);
 
-            pendingRun = new PendingRun(
+            pendingRun = newPendingRun(
                 gameLine,
                 Integer.parseInt(killCountMatcher.group("count").replace(",", "")),
-                client.getAccountHash(),
-                client.getWorld(),
-                client.getVarbitValue(VarbitID.TOA_CLIENT_RAID_LEVEL),
-                localPlayerName(),
                 timerStartTick == null ? null : timedNpcName,
                 timerStartTick == null ? 0 : (gameLine.tick - timerStartTick) * MS_PER_TICK);
         }
+        else if (PERSONAL_BEST.matcher(message).find()
+            && (pendingRun == null || pendingRun.killCountLine.tick != gameLine.tick))
+        {
+            if (pendingRun != null)
+            {
+                sendPendingRun();
+            }
+
+            pendingRun = newPendingRun(gameLine, NO_KILL_COUNT, null, 0);
+        }
+    }
+
+    private PendingRun newPendingRun(GameLine gameLine, int killCount, String pluginTimerNpcName, long pluginTimerMs)
+    {
+        return new PendingRun(
+            gameLine,
+            killCount,
+            client.getAccountHash(),
+            client.getWorld(),
+            client.getVarbitValue(VarbitID.TOA_CLIENT_RAID_LEVEL),
+            localPlayerName(),
+            pluginTimerNpcName,
+            pluginTimerMs,
+            new int[] {partySize(TOB_PARTY_SLOTS), partySize(TOA_PARTY_SLOTS), partySize(TFA_PARTY_SLOTS)});
+    }
+
+    private int partySize(int[] partySlotVarbits)
+    {
+        int partySize = 0;
+        for (int partySlotVarbit : partySlotVarbits)
+        {
+            if (client.getVarbitValue(partySlotVarbit) > 0)
+            {
+                partySize++;
+            }
+        }
+
+        return partySize;
     }
 
     @Subscribe
@@ -389,6 +436,9 @@ public class CompletedRunTracker
 
         JsonObject varbits = new JsonObject();
         varbits.addProperty("toa_raid_level", run.toaRaidLevel);
+        varbits.addProperty("tob_party_size", run.raidPartySizes[0]);
+        varbits.addProperty("toa_party_size", run.raidPartySizes[1]);
+        varbits.addProperty("tfa_party_size", run.raidPartySizes[2]);
 
         JsonObject completedRun = new JsonObject();
         completedRun.addProperty("account_hash", String.valueOf(run.accountHash));
@@ -512,9 +562,10 @@ public class CompletedRunTracker
         private final String localPlayerName;
         private final String pluginTimerNpcName;
         private final long pluginTimerMs;
+        private final int[] raidPartySizes;
 
         private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, String localPlayerName,
-            String pluginTimerNpcName, long pluginTimerMs)
+            String pluginTimerNpcName, long pluginTimerMs, int[] raidPartySizes)
         {
             this.killCountLine = killCountLine;
             this.killCount = killCount;
@@ -524,6 +575,7 @@ public class CompletedRunTracker
             this.localPlayerName = localPlayerName;
             this.pluginTimerNpcName = pluginTimerNpcName;
             this.pluginTimerMs = pluginTimerMs;
+            this.raidPartySizes = raidPartySizes;
         }
     }
 }
