@@ -52,6 +52,9 @@ public class ClanChatService
 
     private static final int MAX_SECONDS_BETWEEN_SAME_LINE = 60;
 
+    private static final String SHARE_CLAN_CHAT_REMINDER =
+        "Turn on <col=ffff00>Share my clan chat</col> in the Valiance plugin settings so clanmates who log in later can see your messages.";
+
     @Inject
     private Client client;
 
@@ -67,6 +70,7 @@ public class ClanChatService
     private int ticksOutsideClan;
     private int ticksUntilConnectAttempt;
     private boolean historyRequestedThisLogin;
+    private boolean remindedToShareThisLogin;
     private boolean addingServerLines;
 
     public void startUp()
@@ -81,6 +85,7 @@ public class ClanChatService
         ticksOutsideClan = 0;
         ticksUntilConnectAttempt = 0;
         historyRequestedThisLogin = false;
+        remindedToShareThisLogin = false;
     }
 
     public static boolean isValiance(ClanChannel channel)
@@ -262,7 +267,31 @@ public class ClanChatService
     private void onWelcome(JsonObject welcome)
     {
         rankIcons.onWelcome(welcome);
+        replayHistory(welcome);
+        remindToShareClanChat();
+    }
 
+    private void remindToShareClanChat()
+    {
+        if (remindedToShareThisLogin || config.shareClanChat() || !isInValianceChannel())
+        {
+            return;
+        }
+
+        remindedToShareThisLogin = true;
+        addingServerLines = true;
+        try
+        {
+            client.addChatMessage(broadcastType(), "", SHARE_CLAN_CHAT_REMINDER, CLAN_NAME);
+        }
+        finally
+        {
+            addingServerLines = false;
+        }
+    }
+
+    private void replayHistory(JsonObject welcome)
+    {
         JsonElement historyElement = welcome.get("history");
         if (historyElement == null || !historyElement.isJsonArray())
         {
