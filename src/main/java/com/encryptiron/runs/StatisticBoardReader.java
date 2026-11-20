@@ -46,7 +46,7 @@ public class StatisticBoardReader
     private final Map<Integer, Integer> ticksLeftToRecogniseByInterface = new HashMap<>();
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
-    private final Map<Integer, Map<Widget, TextAppearance>> textAppearancesByInterface = new HashMap<>();
+    private final Map<Integer, Map<Widget, WidgetAppearance>> widgetAppearancesByInterface = new HashMap<>();
     private final Map<Integer, String> lastReadBoardByInterface = new HashMap<>();
     private final Map<Integer, Integer> unchangedReadsByInterface = new HashMap<>();
     private long boardReads;
@@ -64,7 +64,7 @@ public class StatisticBoardReader
     public void onGameTick(GameTick gameTick)
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
-        textAppearancesByInterface.keySet().retainAll(openBoards);
+        widgetAppearancesByInterface.keySet().retainAll(openBoards);
         lastReadBoardByInterface.keySet().retainAll(openBoards);
         unchangedReadsByInterface.keySet().retainAll(openBoards);
         for (int interfaceId : openBoards)
@@ -99,30 +99,49 @@ public class StatisticBoardReader
         }
 
         long readNumber = ++boardReads;
-        Map<Widget, TextAppearance> previousTextAppearances = textAppearancesByInterface.getOrDefault(interfaceId, Collections.emptyMap());
-        Map<Widget, TextAppearance> textAppearances = new IdentityHashMap<>();
-        Map<String, BoardText> topmostTextByPosition = new HashMap<>();
-        boolean hasPersonalLabel = false;
-        boolean hasTime = false;
+        Map<Widget, WidgetAppearance> previousAppearances = widgetAppearancesByInterface.getOrDefault(interfaceId, Collections.emptyMap());
+        Map<Widget, WidgetAppearance> appearances = new IdentityHashMap<>();
+        List<Widget> textWidgets = new ArrayList<>();
+        List<Widget> covers = new ArrayList<>();
         for (Widget widget : widgetsInDrawOrder)
         {
-            String text = widget.getText() == null
-                ? ""
-                : Text.removeTags(LINE_BREAK.matcher(widget.getText()).replaceAll("\n")).replace((char) 0xA0, ' ').trim();
-            Point location = widget.getCanvasLocation();
-            if (widget.getType() != WidgetType.TEXT || location == null || !isDrawn(widget))
+            if (widget.getCanvasLocation() == null || !isDrawn(widget))
             {
                 continue;
             }
 
-            TextAppearance appearance = previousTextAppearances.get(widget);
+            String text = textOf(widget);
+            WidgetAppearance appearance = previousAppearances.get(widget);
             if (appearance == null || !appearance.text.equals(text))
             {
-                appearance = new TextAppearance(text, readNumber);
+                appearance = new WidgetAppearance(text, readNumber);
             }
-            textAppearances.put(widget, appearance);
+            appearances.put(widget, appearance);
 
-            BoardText boardText = new BoardText(text, location.getX() + widget.getWidth() / 2, location.getY(), appearance.readNumber);
+            if (widget.getType() == WidgetType.TEXT)
+            {
+                textWidgets.add(widget);
+            }
+            else if (canCover(widget))
+            {
+                covers.add(widget);
+            }
+        }
+        widgetAppearancesByInterface.put(interfaceId, appearances);
+
+        Map<String, BoardText> topmostTextByPosition = new HashMap<>();
+        boolean hasPersonalLabel = false;
+        boolean hasTime = false;
+        for (Widget widget : textWidgets)
+        {
+            WidgetAppearance appearance = appearances.get(widget);
+            if (isCoveredByNewerWidget(widget, appearance.readNumber, covers, appearances))
+            {
+                continue;
+            }
+
+            Point location = widget.getCanvasLocation();
+            BoardText boardText = new BoardText(appearance.text, location.getX() + widget.getWidth() / 2, location.getY(), appearance.readNumber);
             String position = boardText.x + "," + boardText.y;
             BoardText covered = topmostTextByPosition.get(position);
             if (covered == null || boardText.appearedOnRead >= covered.appearedOnRead)
@@ -130,7 +149,6 @@ public class StatisticBoardReader
                 topmostTextByPosition.put(position, boardText);
             }
         }
-        textAppearancesByInterface.put(interfaceId, textAppearances);
 
         List<BoardText> boardTexts = new ArrayList<>(topmostTextByPosition.values());
         boardTexts.removeIf(boardText -> boardText.text.isEmpty());
@@ -142,7 +160,7 @@ public class StatisticBoardReader
 
         if (!hasPersonalLabel || !hasTime)
         {
-            textAppearancesByInterface.remove(interfaceId);
+            widgetAppearancesByInterface.remove(interfaceId);
             return false;
         }
 
@@ -190,16 +208,63 @@ public class StatisticBoardReader
         }
     }
 
-    private static class TextAppearance
+    private static class WidgetAppearance
     {
         private final String text;
         private final long readNumber;
 
-        private TextAppearance(String text, long readNumber)
+        private WidgetAppearance(String text, long readNumber)
         {
             this.text = text;
             this.readNumber = readNumber;
         }
+    }
+
+    private static String textOf(Widget widget)
+    {
+        return widget.getType() != WidgetType.TEXT || widget.getText() == null
+            ? ""
+            : Text.removeTags(LINE_BREAK.matcher(widget.getText()).replaceAll("\n")).replace((char) 0xA0, ' ').trim();
+    }
+
+    private static boolean canCover(Widget widget)
+    {
+        switch (widget.getType())
+        {
+            case WidgetType.LAYER:
+                return true;
+            case WidgetType.RECTANGLE:
+                return widget.isFilled() && widget.getOpacity() == 0;
+            case WidgetType.GRAPHIC:
+                return widget.getSpriteId() >= 0 && widget.getOpacity() == 0;
+            default:
+                return false;
+        }
+    }
+
+    private static boolean isCoveredByNewerWidget(Widget widget, long appearedOnRead, List<Widget> covers,
+        Map<Widget, WidgetAppearance> appearances)
+    {
+        Set<Widget> ancestors = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Widget ancestor = widget.getParent(); ancestor != null; ancestor = ancestor.getParent())
+        {
+            ancestors.add(ancestor);
+        }
+
+        Rectangle bounds = widget.getBounds();
+        int centreX = bounds.x + bounds.width / 2;
+        int centreY = bounds.y + bounds.height / 2;
+        for (Widget cover : covers)
+        {
+            if (appearances.get(cover).readNumber > appearedOnRead
+                && !ancestors.contains(cover)
+                && cover.getBounds().contains(centreX, centreY))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static boolean isDrawn(Widget widget)
