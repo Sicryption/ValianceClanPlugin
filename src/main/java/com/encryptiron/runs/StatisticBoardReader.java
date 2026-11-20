@@ -44,6 +44,8 @@ public class StatisticBoardReader
     private final Map<Integer, Integer> ticksLeftToRecogniseByInterface = new HashMap<>();
     private final Set<Integer> openBoards = new HashSet<>();
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
+    private final Map<Integer, Map<Widget, TextAppearance>> textAppearancesByInterface = new HashMap<>();
+    private long boardReads;
 
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
@@ -58,6 +60,7 @@ public class StatisticBoardReader
     public void onGameTick(GameTick gameTick)
     {
         openBoards.removeIf(interfaceId -> client.getWidget(interfaceId, 0) == null);
+        textAppearancesByInterface.keySet().retainAll(openBoards);
         for (int interfaceId : openBoards)
         {
             readBoard(interfaceId);
@@ -78,16 +81,24 @@ public class StatisticBoardReader
 
     private boolean readBoard(int interfaceId)
     {
-        Set<Widget> widgets = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<Widget> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Widget> widgetsInDrawOrder = new ArrayList<>();
         for (int componentId = 0; componentId < MOST_COMPONENTS_PER_INTERFACE; componentId++)
         {
-            collect(client.getWidget(interfaceId, componentId), widgets);
+            Widget widget = client.getWidget(interfaceId, componentId);
+            if (widget != null && widget.getParentId() >>> 16 != interfaceId)
+            {
+                collect(widget, visited, widgetsInDrawOrder);
+            }
         }
 
-        List<BoardText> boardTexts = new ArrayList<>();
+        long readNumber = ++boardReads;
+        Map<Widget, TextAppearance> previousTextAppearances = textAppearancesByInterface.getOrDefault(interfaceId, Collections.emptyMap());
+        Map<Widget, TextAppearance> textAppearances = new IdentityHashMap<>();
+        Map<String, BoardText> topmostTextByPosition = new HashMap<>();
         boolean hasPersonalLabel = false;
         boolean hasTime = false;
-        for (Widget widget : widgets)
+        for (Widget widget : widgetsInDrawOrder)
         {
             String text = widget.getText() == null
                 ? ""
@@ -98,13 +109,33 @@ public class StatisticBoardReader
                 continue;
             }
 
-            hasPersonalLabel |= PERSONAL_LINE.matcher(text).find();
-            hasTime |= TIME.matcher(text).find();
-            boardTexts.add(new BoardText(text, location.getX() + widget.getWidth() / 2, location.getY()));
+            TextAppearance appearance = previousTextAppearances.get(widget);
+            if (appearance == null || !appearance.text.equals(text))
+            {
+                appearance = new TextAppearance(text, readNumber);
+            }
+            textAppearances.put(widget, appearance);
+
+            BoardText boardText = new BoardText(text, location.getX() + widget.getWidth() / 2, location.getY(), appearance.readNumber);
+            String position = boardText.x + "," + boardText.y;
+            BoardText covered = topmostTextByPosition.get(position);
+            if (covered == null || boardText.appearedOnRead >= covered.appearedOnRead)
+            {
+                topmostTextByPosition.put(position, boardText);
+            }
+        }
+        textAppearancesByInterface.put(interfaceId, textAppearances);
+
+        List<BoardText> boardTexts = new ArrayList<>(topmostTextByPosition.values());
+        for (BoardText boardText : boardTexts)
+        {
+            hasPersonalLabel |= PERSONAL_LINE.matcher(boardText.text).find();
+            hasTime |= TIME.matcher(boardText.text).find();
         }
 
         if (!hasPersonalLabel || !hasTime)
         {
+            textAppearancesByInterface.remove(interfaceId);
             return false;
         }
 
@@ -137,12 +168,26 @@ public class StatisticBoardReader
         private final String text;
         private final int x;
         private final int y;
+        private final long appearedOnRead;
 
-        private BoardText(String text, int x, int y)
+        private BoardText(String text, int x, int y, long appearedOnRead)
         {
             this.text = text;
             this.x = x;
             this.y = y;
+            this.appearedOnRead = appearedOnRead;
+        }
+    }
+
+    private static class TextAppearance
+    {
+        private final String text;
+        private final long readNumber;
+
+        private TextAppearance(String text, long readNumber)
+        {
+            this.text = text;
+            this.readNumber = readNumber;
         }
     }
 
@@ -165,19 +210,20 @@ public class StatisticBoardReader
         return true;
     }
 
-    private static void collect(Widget widget, Set<Widget> widgets)
+    private static void collect(Widget widget, Set<Widget> visited, List<Widget> widgetsInDrawOrder)
     {
-        if (widget == null || !widgets.add(widget))
+        if (widget == null || !visited.add(widget))
         {
             return;
         }
 
-        collectAll(widget.getStaticChildren(), widgets);
-        collectAll(widget.getDynamicChildren(), widgets);
-        collectAll(widget.getNestedChildren(), widgets);
+        widgetsInDrawOrder.add(widget);
+        collectAll(widget.getStaticChildren(), visited, widgetsInDrawOrder);
+        collectAll(widget.getDynamicChildren(), visited, widgetsInDrawOrder);
+        collectAll(widget.getNestedChildren(), visited, widgetsInDrawOrder);
     }
 
-    private static void collectAll(Widget[] children, Set<Widget> widgets)
+    private static void collectAll(Widget[] children, Set<Widget> visited, List<Widget> widgetsInDrawOrder)
     {
         if (children == null)
         {
@@ -186,7 +232,7 @@ public class StatisticBoardReader
 
         for (Widget child : children)
         {
-            collect(child, widgets);
+            collect(child, visited, widgetsInDrawOrder);
         }
     }
 }
