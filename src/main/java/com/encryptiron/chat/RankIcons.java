@@ -31,6 +31,9 @@ import net.runelite.api.Client;
 import net.runelite.api.IconID;
 import net.runelite.api.IndexedSprite;
 import net.runelite.api.MessageNode;
+import net.runelite.api.clan.ClanChannel;
+import net.runelite.api.clan.ClanChannelMember;
+import net.runelite.api.clan.ClanRank;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.ScriptCallbackEvent;
 import net.runelite.client.callback.ClientThread;
@@ -51,6 +54,7 @@ public class RankIcons
     private static final int NEAR_BLACK = 0x010101;
     private static final int RANK_ICON_OFFSET_Y = 2;
     private static final Pattern NAME_SPACING = Pattern.compile("[\\s_\\u00A0]+");
+    private static final List<String> GUEST_RANKS = List.of("Guest");
 
     private static final Set<Integer> NON_RANK_ACCOUNT_ICONS = Set.of(
         IconID.PLAYER_MODERATOR.getIndex(),
@@ -499,7 +503,12 @@ public class RankIcons
     public String rankIconTags(String name)
     {
         StringBuilder tags = new StringBuilder();
-        List<String> ranks = members.get(normaliseName(Text.removeTags(name)));
+        String plainName = Text.removeTags(name);
+        List<String> ranks = members.get(normaliseName(plainName));
+        if (ranks == null && isValianceGuest(plainName))
+        {
+            ranks = GUEST_RANKS;
+        }
         if (ranks != null)
         {
             for (String rank : ranks)
@@ -512,6 +521,22 @@ public class RankIcons
             }
         }
         return tags.toString();
+    }
+
+    private boolean isValianceGuest(String name)
+    {
+        return isGuestIn(client.getClanChannel(), name) || isGuestIn(client.getGuestClanChannel(), name);
+    }
+
+    private static boolean isGuestIn(ClanChannel channel, String name)
+    {
+        if (!ClanChatService.isValiance(channel))
+        {
+            return false;
+        }
+
+        ClanChannelMember member = channel.findMember(name);
+        return member != null && ClanRank.GUEST.equals(member.getRank());
     }
 
     public int getRanksRevision()
