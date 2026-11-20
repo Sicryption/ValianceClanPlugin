@@ -1,5 +1,6 @@
 package com.encryptiron.runs;
 
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -32,6 +33,7 @@ public class StatisticBoardReader
     private static final Pattern PERSONAL_LINE = Pattern.compile("(?im)^\\s*(?:personal|fastest|best)\\b");
     private static final Pattern TIME = Pattern.compile("\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?");
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
+    private static final int FULLY_TRANSPARENT = 255;
 
     @Inject
     private Client client;
@@ -46,7 +48,10 @@ public class StatisticBoardReader
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-        ticksLeftToRecogniseByInterface.put(widgetLoaded.getGroupId(), TICKS_TO_RECOGNISE_A_BOARD);
+        if (widgetLoaded.getGroupId() != client.getTopLevelInterfaceId())
+        {
+            ticksLeftToRecogniseByInterface.put(widgetLoaded.getGroupId(), TICKS_TO_RECOGNISE_A_BOARD);
+        }
     }
 
     @Subscribe
@@ -88,7 +93,7 @@ public class StatisticBoardReader
                 ? ""
                 : Text.removeTags(LINE_BREAK.matcher(widget.getText()).replaceAll("\n")).replace((char) 0xA0, ' ').trim();
             Point location = widget.getCanvasLocation();
-            if (text.isEmpty() || widget.isHidden() || location == null)
+            if (text.isEmpty() || location == null || !isDrawn(widget))
             {
                 continue;
             }
@@ -139,6 +144,25 @@ public class StatisticBoardReader
             this.x = x;
             this.y = y;
         }
+    }
+
+    private static boolean isDrawn(Widget widget)
+    {
+        if (widget.isHidden() || widget.getOpacity() >= FULLY_TRANSPARENT)
+        {
+            return false;
+        }
+
+        Rectangle bounds = widget.getBounds();
+        for (Widget ancestor = widget.getParent(); ancestor != null; ancestor = ancestor.getParent())
+        {
+            if (!bounds.intersects(ancestor.getBounds()))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void collect(Widget widget, Set<Widget> widgets)
