@@ -10,7 +10,6 @@ import net.runelite.client.config.Range;
 public interface ValianceConfig extends Config
 {
     String GROUP = "encryptiron";
-    String SHOW_VALIANCE_RANKS = "showValianceRanks";
 
     @ConfigItem(
         keyName = "chatMessageOnEventItemAccepted",
@@ -90,17 +89,5 @@ public interface ValianceConfig extends Config
     default int clanChatHistoryCount()
     {
         return 10;
-    }
-
-    @ConfigItem(
-        keyName = SHOW_VALIANCE_RANKS,
-        name = "Valiance ranks",
-        description = "Shows every Valiance rank a member holds beside their name in clan chat, in place of their in-game clan rank.",
-        position = 8,
-        section = clanChatSection
-    )
-    default boolean showValianceRanks()
-    {
-        return true;
     }
 }

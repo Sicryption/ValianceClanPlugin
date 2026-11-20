@@ -9,8 +9,6 @@ import java.util.regex.Pattern;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.encryptiron.ValianceConfig;
-
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.ScriptID;
@@ -26,7 +24,6 @@ import net.runelite.api.widgets.WidgetTextAlignment;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.util.Text;
 
 @Singleton
@@ -48,9 +45,6 @@ public class ClanRankWidgets
     @Inject
     private RankIcons rankIcons;
 
-    @Inject
-    private ValianceConfig config;
-
     private Set<Integer> clanRankSprites;
     private boolean chatRebuilt;
     private int decoratedRanksRevision = -1;
@@ -63,7 +57,7 @@ public class ClanRankWidgets
         {
             chatRebuilt = true;
         }
-        else if (scriptId == ScriptID.CLAN_SIDEPANEL_DRAW && config.showValianceRanks())
+        else if (scriptId == ScriptID.CLAN_SIDEPANEL_DRAW)
         {
             decoratePlayerLists();
         }
@@ -73,15 +67,6 @@ public class ClanRankWidgets
     public void onChatMessage(ChatMessage event)
     {
         chatRebuilt = true;
-    }
-
-    @Subscribe
-    public void onConfigChanged(ConfigChanged event)
-    {
-        if (ValianceConfig.GROUP.equals(event.getGroup()) && ValianceConfig.SHOW_VALIANCE_RANKS.equals(event.getKey()))
-        {
-            redrawRanks();
-        }
     }
 
     public void redrawRanks()
@@ -109,21 +94,13 @@ public class ClanRankWidgets
         if (chatRebuilt)
         {
             chatRebuilt = false;
-            if (config.showValianceRanks())
-            {
-                hideChatRankGraphics();
-            }
+            hideChatRankGraphics();
         }
     }
 
     @Subscribe
     public void onGameTick(GameTick tick)
     {
-        if (!config.showValianceRanks())
-        {
-            return;
-        }
-
         hideChatRankGraphics();
 
         if (rankIcons.getRanksRevision() != decoratedRanksRevision)

@@ -22,7 +22,6 @@ import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import com.encryptiron.ValianceConfig;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -79,9 +78,6 @@ public class RankIcons
 
     @Inject
     private ValianceSocket socket;
-
-    @Inject
-    private ValianceConfig config;
 
     @Inject
     private Gson gson;
@@ -382,7 +378,7 @@ public class RankIcons
     @Subscribe
     public void onClientTick(ClientTick tick)
     {
-        if (!config.showValianceRanks() || icons.isEmpty())
+        if (icons.isEmpty())
         {
             return;
         }
@@ -440,7 +436,7 @@ public class RankIcons
     @Subscribe
     public void onScriptCallbackEvent(ScriptCallbackEvent event)
     {
-        if (!CHAT_MESSAGE_BUILDING.equals(event.getEventName()) || !config.showValianceRanks())
+        if (!CHAT_MESSAGE_BUILDING.equals(event.getEventName()))
         {
             return;
         }
