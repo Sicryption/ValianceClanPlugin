@@ -2,6 +2,7 @@ package com.encryptiron.runs;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Iterator;
 
 import javax.inject.Inject;
 
@@ -69,10 +70,17 @@ class SetupSnapshots
 
     void dropOlderThan(long cutoffMs)
     {
-        while (snapshots.size() > 1 && snapshots.peekFirst().timeMs < cutoffMs)
+        while (snapshots.size() > 1 && secondSnapshot().timeMs <= cutoffMs)
         {
             snapshots.removeFirst();
         }
+    }
+
+    private Snapshot secondSnapshot()
+    {
+        Iterator<Snapshot> iterator = snapshots.iterator();
+        iterator.next();
+        return iterator.next();
     }
 
     private JsonObject currentSetup()

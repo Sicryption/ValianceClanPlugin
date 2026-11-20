@@ -19,9 +19,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.Point;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
@@ -36,6 +39,7 @@ public class StatisticBoardReader
     private static final Pattern LINE_BREAK = Pattern.compile("(?i)<br\\s*/?>");
     private static final int FULLY_TRANSPARENT = 255;
     private static final int COVER_TO_TEXT_AREA = 9;
+    private static final Set<Integer> NEVER_BOARDS = Set.of(InterfaceID.CHATBOX, InterfaceID.PM_CHAT, InterfaceID.CHATCHANNEL_CURRENT);
 
     @Inject
     private Client client;
@@ -53,9 +57,22 @@ public class StatisticBoardReader
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
     {
-        if (widgetLoaded.getGroupId() != client.getTopLevelInterfaceId())
+        if (widgetLoaded.getGroupId() != client.getTopLevelInterfaceId() && !NEVER_BOARDS.contains(widgetLoaded.getGroupId()))
         {
             ticksLeftToRecogniseByInterface.put(widgetLoaded.getGroupId(), TICKS_TO_RECOGNISE_A_BOARD);
+        }
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged gameStateChanged)
+    {
+        if (gameStateChanged.getGameState() == GameState.LOGIN_SCREEN || gameStateChanged.getGameState() == GameState.HOPPING)
+        {
+            ticksLeftToRecogniseByInterface.clear();
+            openBoards.clear();
+            lastSentBoardByInterface.clear();
+            lastReadBoardByInterface.clear();
+            widgetAppearancesByInterface.clear();
         }
     }
 
@@ -94,6 +111,12 @@ public class StatisticBoardReader
             {
                 collect(widget, visited, widgetsInDrawOrder);
             }
+        }
+
+        if (widgetsInDrawOrder.stream().noneMatch(widget -> PERSONAL_LINE.matcher(textOf(widget)).find()))
+        {
+            widgetAppearancesByInterface.remove(interfaceId);
+            return false;
         }
 
         long readNumber = ++boardReads;

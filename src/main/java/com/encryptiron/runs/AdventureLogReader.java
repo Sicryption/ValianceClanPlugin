@@ -54,11 +54,7 @@ public class AdventureLogReader
         if (adventureLogMenuLoaded)
         {
             adventureLogMenuLoaded = false;
-            String owner = readAdventureLogOwner();
-            if (owner != null)
-            {
-                adventureLogOwner = owner;
-            }
+            adventureLogOwner = readAdventureLogOwner();
         }
 
         if (journalScrollLoaded)
