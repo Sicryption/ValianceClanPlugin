@@ -136,7 +136,8 @@ public class StatisticBoardReader
             }
 
             Point location = widget.getCanvasLocation();
-            BoardText boardText = new BoardText(appearance.text, location.getX() + widget.getWidth() / 2, location.getY(), appearance.readNumber);
+            BoardText boardText = new BoardText(appearance.text, location.getX() + widget.getWidth() / 2, location.getY(), appearance.readNumber,
+                widget.getTextColor(), backgroundOf(widget, covers));
             String position = boardText.x + "," + boardText.y;
             BoardText covered = topmostTextByPosition.get(position);
             if (covered == null || boardText.appearedOnRead >= covered.appearedOnRead)
@@ -170,6 +171,11 @@ public class StatisticBoardReader
             entry.addProperty("text", boardText.text);
             entry.addProperty("x", boardText.x);
             entry.addProperty("y", boardText.y);
+            entry.addProperty("c", boardText.textColor);
+            if (boardText.background != null)
+            {
+                entry.addProperty("bg", boardText.background);
+            }
             texts.add(entry);
         }
 
@@ -189,13 +195,17 @@ public class StatisticBoardReader
         private final int x;
         private final int y;
         private final long appearedOnRead;
+        private final int textColor;
+        private final String background;
 
-        private BoardText(String text, int x, int y, long appearedOnRead)
+        private BoardText(String text, int x, int y, long appearedOnRead, int textColor, String background)
         {
             this.text = text;
             this.x = x;
             this.y = y;
             this.appearedOnRead = appearedOnRead;
+            this.textColor = textColor;
+            this.background = background;
         }
     }
 
@@ -231,6 +241,34 @@ public class StatisticBoardReader
             default:
                 return false;
         }
+    }
+
+    private static String backgroundOf(Widget widget, List<Widget> covers)
+    {
+        Rectangle bounds = widget.getBounds();
+        int centreX = bounds.x + bounds.width / 2;
+        int centreY = bounds.y + bounds.height / 2;
+        Widget background = null;
+        long backgroundArea = Long.MAX_VALUE;
+        for (Widget cover : covers)
+        {
+            Rectangle coverBounds = cover.getBounds();
+            long area = (long) coverBounds.width * coverBounds.height;
+            if (cover.getType() != WidgetType.LAYER && area < backgroundArea && coverBounds.contains(centreX, centreY))
+            {
+                background = cover;
+                backgroundArea = area;
+            }
+        }
+
+        if (background == null)
+        {
+            return null;
+        }
+
+        return background.getType() == WidgetType.GRAPHIC
+            ? "s" + background.getSpriteId()
+            : "r" + Integer.toHexString(background.getTextColor());
     }
 
     private static boolean isCoveredByNewerWidget(Widget widget, long appearedOnRead, List<Widget> covers,
