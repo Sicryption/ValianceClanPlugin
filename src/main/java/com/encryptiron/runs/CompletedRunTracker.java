@@ -68,6 +68,7 @@ public class CompletedRunTracker
     private static final long MS_PER_TICK = 600;
     private static final int NO_KILL_COUNT = -1;
     private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
+    private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: )");
     private static final int[] TOB_PARTY_SLOTS = {
         VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1, VarbitID.TOB_CLIENT_P2, VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4,
     };
@@ -179,7 +180,7 @@ public class CompletedRunTracker
                 timerStartTick == null ? null : timedNpcName,
                 timerStartTick == null ? 0 : (gameLine.tick - timerStartTick) * MS_PER_TICK);
         }
-        else if (PERSONAL_BEST.matcher(message).find()
+        else if ((PERSONAL_BEST.matcher(message).find() || RAID_ROOM_COMPLETE.matcher(message).find())
             && (pendingRun == null || pendingRun.killCountLine.tick != gameLine.tick))
         {
             if (pendingRun != null)
