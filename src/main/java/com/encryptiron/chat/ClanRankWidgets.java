@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.inject.Inject;
@@ -30,6 +31,7 @@ import net.runelite.client.util.Text;
 public class ClanRankWidgets
 {
     private static final Pattern IMG_TAG = Pattern.compile("<img=(\\d+)>");
+    private static final Pattern RANK_TITLE_BEFORE_NAME = Pattern.compile("^(?:<col=[0-9a-fA-F]+>)?[^<]*</col> ");
     private static final String CHANNEL_PREFIX = "[" + ClanChatService.CLAN_NAME + "]";
 
     private static final int CLAN_RANK_SPRITES_ENUM = 3798;
@@ -144,11 +146,66 @@ public class ClanRankWidgets
 
         for (Widget graphic : rankGraphics)
         {
-            Widget line = findLineTextForGraphic(graphic, texts);
-            if (line != null && Text.removeTags(line.getText()).contains(CHANNEL_PREFIX))
+            if (isValianceRow(graphic, texts))
             {
                 graphic.setHidden(true);
                 moveLineIntoHiddenGraphicSpace(graphic, texts);
+            }
+        }
+
+        for (Widget text : texts)
+        {
+            removeRankTitleBeforeName(text, texts);
+        }
+    }
+
+    private boolean isValianceRow(Widget anchor, List<Widget> texts)
+    {
+        for (Widget text : texts)
+        {
+            if (isOnRow(anchor, text)
+                && (Text.removeTags(text.getText()).contains(CHANNEL_PREFIX) || rankIcons.showsRankIcon(text.getText())))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeRankTitleBeforeName(Widget name, List<Widget> texts)
+    {
+        Matcher title = RANK_TITLE_BEFORE_NAME.matcher(name.getText());
+        if (!title.find()
+            || !name.getText().endsWith(":")
+            || name.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT
+            || !isValianceRow(name, texts))
+        {
+            return;
+        }
+
+        int titleWidth = name.getFont() == null ? 0 : name.getFont().getTextWidth(Text.removeTags(title.group()));
+        name.setText(name.getText().substring(title.end()));
+        if (titleWidth <= 0)
+        {
+            name.revalidate();
+            return;
+        }
+
+        if (name.getWidthMode() == WidgetSizeMode.ABSOLUTE)
+        {
+            name.setOriginalWidth(Math.max(0, name.getOriginalWidth() - titleWidth));
+        }
+        name.revalidate();
+
+        for (Widget text : texts)
+        {
+            if (text != name
+                && isOnRow(name, text)
+                && text.getXPositionMode() == WidgetPositionMode.ABSOLUTE_LEFT
+                && text.getOriginalX() > name.getOriginalX())
+            {
+                text.setOriginalX(text.getOriginalX() - titleWidth);
+                text.revalidate();
             }
         }
     }
@@ -222,26 +279,6 @@ public class ClanRankWidgets
                 rankGraphics.add(child);
             }
         }
-    }
-
-    private static Widget findLineTextForGraphic(Widget graphic, List<Widget> texts)
-    {
-        Widget found = null;
-        for (Widget text : texts)
-        {
-            if (isOnRow(graphic, text))
-            {
-                if (Text.removeTags(text.getText()).contains(CHANNEL_PREFIX))
-                {
-                    return text;
-                }
-                if (found == null)
-                {
-                    found = text;
-                }
-            }
-        }
-        return found;
     }
 
     private void decoratePlayerLists()
