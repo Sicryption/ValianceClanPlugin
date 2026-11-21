@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,8 @@ public class CompletedRunTracker
 {
     private static final long SIGHTING_RETENTION_MS = TimeUnit.HOURS.toMillis(6);
     private static final long RUN_WINDOW_MARGIN_MS = 6000;
+    private static final long LONGEST_COLOSSEUM_RUN_MS = TimeUnit.HOURS.toMillis(3);
+    private static final Pattern COLOSSEUM_WAVE_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*wave (\\d+) completed! wave duration:");
     private static final int KILL_COUNT_VARP_TICKS_AROUND_LINE = 10;
     private static final int MOST_TICKS_TO_WAIT_FOR_KILL_COUNT_VARP = 3;
     private static final int TICKS_BETWEEN_PRUNES = 100;
@@ -489,7 +492,8 @@ public class CompletedRunTracker
         }
 
         long endMs = killCountLine.timeMs;
-        long startMs = endMs - longestCompletionTimeMs - RUN_WINDOW_MARGIN_MS;
+        long runStartMs = Math.min(endMs - longestCompletionTimeMs, colosseumRunStartMs(killCountLine));
+        long startMs = runStartMs - RUN_WINDOW_MARGIN_MS;
 
         JsonArray lines = new JsonArray();
         for (GameLine gameLine : gameLines)
@@ -563,7 +567,7 @@ public class CompletedRunTracker
             waveTimer.addProperty("duration_ms", run.timedWave.durationMs);
             completedRun.add("wave_timer", waveTimer);
         }
-        completedRun.add("setup", setupSnapshots.setupAt(endMs - longestCompletionTimeMs));
+        completedRun.add("setup", setupSnapshots.setupAt(runStartMs));
 
         sendCompletedRun.send(completedRun);
     }
@@ -605,6 +609,39 @@ public class CompletedRunTracker
 
         String cleaned = Text.removeTags(name).replace((char) 0xA0, ' ').trim();
         return cleaned.isEmpty() ? null : cleaned;
+    }
+
+    private long colosseumRunStartMs(GameLine endLine)
+    {
+        boolean endsOnColosseumWave = gameLines.stream()
+            .anyMatch(gameLine -> gameLine.tick == endLine.tick && COLOSSEUM_WAVE_COMPLETE.matcher(gameLine.message).find());
+        if (!endsOnColosseumWave)
+        {
+            return Long.MAX_VALUE;
+        }
+
+        Iterator<GameLine> newestFirst = gameLines.descendingIterator();
+        while (newestFirst.hasNext())
+        {
+            GameLine gameLine = newestFirst.next();
+            if (gameLine.timeMs > endLine.timeMs)
+            {
+                continue;
+            }
+            if (gameLine.timeMs < endLine.timeMs - LONGEST_COLOSSEUM_RUN_MS)
+            {
+                break;
+            }
+
+            Matcher wave = COLOSSEUM_WAVE_COMPLETE.matcher(gameLine.message);
+            Matcher duration = ROOM_DURATION.matcher(gameLine.message);
+            if (wave.find() && Integer.parseInt(wave.group(1)) == 1 && duration.find())
+            {
+                return gameLine.timeMs - timeToMs(duration.group("time"));
+            }
+        }
+
+        return Long.MAX_VALUE;
     }
 
     private JsonObject roomSetupFor(GameLine gameLine)
