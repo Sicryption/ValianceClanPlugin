@@ -71,6 +71,7 @@ public class CompletedRunTracker
     private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
     private static final Pattern ROOM_DURATION = Pattern.compile("(?i)duration:\\s*(?:<[^>]*>)*\\s*(?<time>\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?)");
     private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: )");
+    private static final Pattern CHAMBERS_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>|@[a-z0-9_]+@)*(?:(?:combat room|puzzle) `[^`]+` complete!|(?:upper|middle|lower) level complete!)");
     private static final int[] TOB_PARTY_SLOTS = {
         VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1, VarbitID.TOB_CLIENT_P2, VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4,
     };
@@ -516,7 +517,7 @@ public class CompletedRunTracker
 
     private JsonObject roomSetupFor(GameLine gameLine)
     {
-        if (!RAID_ROOM_COMPLETE.matcher(gameLine.message).find())
+        if (!RAID_ROOM_COMPLETE.matcher(gameLine.message).find() && !CHAMBERS_ROOM_COMPLETE.matcher(gameLine.message).find())
         {
             return null;
         }
