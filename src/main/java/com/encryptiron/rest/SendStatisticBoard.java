@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 public class SendStatisticBoard extends PostCommand
 {
     private JsonArray boardTexts;
+    private String boardBoss;
 
     @Override
     String endpoint()
@@ -18,12 +19,17 @@ public class SendStatisticBoard extends PostCommand
     {
         JsonObject body = new JsonObject();
         body.add("texts", boardTexts);
+        if (boardBoss != null)
+        {
+            body.addProperty("content", boardBoss);
+        }
         return body;
     }
 
-    public void send(JsonArray boardTexts)
+    public void send(JsonArray boardTexts, String boardBoss)
     {
         this.boardTexts = boardTexts;
+        this.boardBoss = boardBoss;
         send();
     }
 
