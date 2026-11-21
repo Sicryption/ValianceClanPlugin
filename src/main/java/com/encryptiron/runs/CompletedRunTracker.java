@@ -72,6 +72,7 @@ public class CompletedRunTracker
     private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
     private static final Pattern ROOM_DURATION = Pattern.compile("(?i)duration:\\s*(?:<[^>]*>)*\\s*(?<time>\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?)");
     private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: |wave \\d+ completed! wave duration:)");
+    private static final Pattern CHAMBERS_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>|@[a-z0-9_]+@)*(?:(?:combat room|puzzle) `[^`]+` complete!|(?:upper|middle|lower) level complete!)");
     private static final Pattern TZHAAR_WAVE_START = Pattern.compile("Wave: (\\d+)");
     private static final String TZHAAR_WAVE_COMPLETED = "Wave completed!";
     private static final String TZHAAR_DEFEATED = "You have been defeated!";
@@ -607,7 +608,7 @@ public class CompletedRunTracker
 
     private JsonObject roomSetupFor(GameLine gameLine)
     {
-        if (!RAID_ROOM_COMPLETE.matcher(gameLine.message).find())
+        if (!RAID_ROOM_COMPLETE.matcher(gameLine.message).find() && !CHAMBERS_ROOM_COMPLETE.matcher(gameLine.message).find())
         {
             return null;
         }
