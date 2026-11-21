@@ -500,6 +500,23 @@ public class RankIcons
         return rankIconTags(plainName) + accountIcons + plainName;
     }
 
+    public boolean showsRankIcon(String text)
+    {
+        Matcher tags = IMG_TAG.matcher(text);
+        while (tags.find())
+        {
+            int index = Integer.parseInt(tags.group(1));
+            for (RankIcon icon : icons.values())
+            {
+                if (chatIconManager.chatIconIndex(icon.iconId) == index)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public String rankIconTags(String name)
     {
         StringBuilder tags = new StringBuilder();
