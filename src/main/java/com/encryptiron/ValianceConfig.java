@@ -75,6 +75,24 @@ public interface ValianceConfig extends Config
         return false;
     }
 
+    @ConfigItem(
+        keyName = "shareClanChatReminderShown",
+        name = "",
+        description = "",
+        hidden = true
+    )
+    default boolean shareClanChatReminderShown()
+    {
+        return false;
+    }
+
+    @ConfigItem(
+        keyName = "shareClanChatReminderShown",
+        name = "",
+        description = ""
+    )
+    void shareClanChatReminderShown(boolean shown);
+
     @Range(
         min = 0,
         max = 100
