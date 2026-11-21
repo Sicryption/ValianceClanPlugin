@@ -4,6 +4,7 @@ import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -20,11 +21,15 @@ import com.google.gson.JsonObject;
 
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.MenuAction;
+import net.runelite.api.ObjectComposition;
 import net.runelite.api.Point;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.ObjectID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
@@ -40,6 +45,17 @@ public class StatisticBoardReader
     private static final int FULLY_TRANSPARENT = 255;
     private static final int COVER_TO_TEXT_AREA = 9;
     private static final Set<Integer> NEVER_BOARDS = Set.of(InterfaceID.CHATBOX, InterfaceID.PM_CHAT, InterfaceID.CHATCHANNEL_CURRENT);
+    private static final Map<Integer, String> BOSS_BY_SCOREBOARD_OBJECT = Map.of(
+        ObjectID.COWBOSS_SCOREBOARD, "Brutus",
+        ObjectID.COWBOSS_SCOREBOARD_UBER, "Demonic Brutus");
+    private static final Set<Integer> BOARDS_NAMED_BY_THE_OBJECT_CLICKED = Set.of(InterfaceID.COWBOSS_SCOREBOARD);
+    private static final int MOST_TICKS_FROM_CLICK_TO_BOARD = 50;
+    private static final Set<MenuAction> GAME_OBJECT_OPTIONS = EnumSet.of(
+        MenuAction.GAME_OBJECT_FIRST_OPTION,
+        MenuAction.GAME_OBJECT_SECOND_OPTION,
+        MenuAction.GAME_OBJECT_THIRD_OPTION,
+        MenuAction.GAME_OBJECT_FOURTH_OPTION,
+        MenuAction.GAME_OBJECT_FIFTH_OPTION);
 
     @Inject
     private Client client;
@@ -52,7 +68,35 @@ public class StatisticBoardReader
     private final Map<Integer, String> lastSentBoardByInterface = new HashMap<>();
     private final Map<Integer, String> lastReadBoardByInterface = new HashMap<>();
     private final Map<Integer, Map<Widget, WidgetAppearance>> widgetAppearancesByInterface = new HashMap<>();
+    private final Map<Integer, String> bossByBoard = new HashMap<>();
+    private String clickedScoreboardBoss;
+    private int clickedScoreboardTick;
     private long boardReads;
+
+    @Subscribe
+    public void onMenuOptionClicked(MenuOptionClicked menuOptionClicked)
+    {
+        if (GAME_OBJECT_OPTIONS.contains(menuOptionClicked.getMenuAction()))
+        {
+            clickedScoreboardBoss = scoreboardBoss(menuOptionClicked.getId());
+            clickedScoreboardTick = client.getTickCount();
+        }
+    }
+
+    private String scoreboardBoss(int objectId)
+    {
+        ObjectComposition object = client.getObjectDefinition(objectId);
+        if (object != null && object.getImpostorIds() != null)
+        {
+            ObjectComposition shownObject = object.getImpostor();
+            if (shownObject != null)
+            {
+                object = shownObject;
+            }
+        }
+
+        return object == null ? null : BOSS_BY_SCOREBOARD_OBJECT.get(object.getId());
+    }
 
     @Subscribe
     public void onWidgetLoaded(WidgetLoaded widgetLoaded)
@@ -60,6 +104,12 @@ public class StatisticBoardReader
         if (widgetLoaded.getGroupId() != client.getTopLevelInterfaceId() && !NEVER_BOARDS.contains(widgetLoaded.getGroupId()))
         {
             ticksLeftToRecogniseByInterface.put(widgetLoaded.getGroupId(), TICKS_TO_RECOGNISE_A_BOARD);
+        }
+
+        if (BOARDS_NAMED_BY_THE_OBJECT_CLICKED.contains(widgetLoaded.getGroupId()))
+        {
+            boolean clickedJustBefore = client.getTickCount() - clickedScoreboardTick <= MOST_TICKS_FROM_CLICK_TO_BOARD;
+            bossByBoard.put(widgetLoaded.getGroupId(), clickedJustBefore ? clickedScoreboardBoss : null);
         }
     }
 
@@ -73,6 +123,8 @@ public class StatisticBoardReader
             lastSentBoardByInterface.clear();
             lastReadBoardByInterface.clear();
             widgetAppearancesByInterface.clear();
+            bossByBoard.clear();
+            clickedScoreboardBoss = null;
         }
     }
 
@@ -205,12 +257,13 @@ public class StatisticBoardReader
             texts.add(entry);
         }
 
-        String board = boardContent(boardTexts);
+        String boss = bossByBoard.get(interfaceId);
+        String board = boss + "|" + boardContent(boardTexts);
         boolean unchangedSinceLastRead = board.equals(lastReadBoardByInterface.put(interfaceId, board));
         if (unchangedSinceLastRead && !board.equals(lastSentBoardByInterface.get(interfaceId)))
         {
             lastSentBoardByInterface.put(interfaceId, board);
-            sendStatisticBoard.send(texts);
+            sendStatisticBoard.send(texts, boss);
         }
 
         return true;
