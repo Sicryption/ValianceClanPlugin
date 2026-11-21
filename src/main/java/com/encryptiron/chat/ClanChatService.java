@@ -70,7 +70,6 @@ public class ClanChatService
     private int ticksOutsideClan;
     private int ticksUntilConnectAttempt;
     private boolean historyRequestedThisLogin;
-    private boolean remindedToShareThisLogin;
     private boolean addingServerLines;
 
     public void startUp()
@@ -85,7 +84,6 @@ public class ClanChatService
         ticksOutsideClan = 0;
         ticksUntilConnectAttempt = 0;
         historyRequestedThisLogin = false;
-        remindedToShareThisLogin = false;
     }
 
     public static boolean isValiance(ClanChannel channel)
@@ -273,12 +271,12 @@ public class ClanChatService
 
     private void remindToShareClanChat()
     {
-        if (remindedToShareThisLogin || config.shareClanChat() || !isInValianceChannel())
+        if (config.shareClanChatReminderShown() || config.shareClanChat() || !isInValianceChannel())
         {
             return;
         }
 
-        remindedToShareThisLogin = true;
+        config.shareClanChatReminderShown(true);
         addingServerLines = true;
         try
         {
