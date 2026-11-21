@@ -26,6 +26,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.NPC;
 import net.runelite.api.Player;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -70,7 +71,15 @@ public class CompletedRunTracker
     private static final int NO_KILL_COUNT = -1;
     private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
     private static final Pattern ROOM_DURATION = Pattern.compile("(?i)duration:\\s*(?:<[^>]*>)*\\s*(?<time>\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?)");
-    private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: )");
+    private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: |wave \\d+ completed! wave duration:)");
+    private static final Pattern TZHAAR_WAVE_START = Pattern.compile("Wave: (\\d+)");
+    private static final String TZHAAR_WAVE_COMPLETED = "Wave completed!";
+    private static final String TZHAAR_DEFEATED = "You have been defeated!";
+    private static final int INFERNO_REGION = 9043;
+    private static final int FIGHT_CAVES_REGION = 9551;
+    private static final String INFERNO = "The Inferno";
+    private static final String FIGHT_CAVES = "Fight Caves";
+    private static final int INFERNO_TICKS_BEFORE_FIRST_WAVE_LINE = 10;
     private static final int[] TOB_PARTY_SLOTS = {
         VarbitID.TOB_CLIENT_P0, VarbitID.TOB_CLIENT_P1, VarbitID.TOB_CLIENT_P2, VarbitID.TOB_CLIENT_P3, VarbitID.TOB_CLIENT_P4,
     };
@@ -113,6 +122,7 @@ public class CompletedRunTracker
     private final Deque<GameLine> gameLines = new ArrayDeque<>();
     private final Deque<KillCountChange> killCountChanges = new ArrayDeque<>();
     private PendingRun pendingRun;
+    private TzhaarWave tzhaarWave;
 
     @Subscribe
     public void onGameTick(GameTick gameTick)
@@ -156,6 +166,11 @@ public class CompletedRunTracker
         }
 
         String message = chatMessage.getMessage();
+        if (followTzhaarWaves(message))
+        {
+            return;
+        }
+
         Matcher killCountMatcher = KILL_COUNT.matcher(message);
         boolean isKillCountLine = killCountMatcher.find();
         if (!isKillCountLine && !TIME.matcher(message).find())
@@ -184,7 +199,8 @@ public class CompletedRunTracker
                 gameLine,
                 Integer.parseInt(killCountMatcher.group("count").replace(",", "")),
                 timerStartTick == null ? null : timedNpcName,
-                timerStartTick == null ? 0 : (gameLine.tick - timerStartTick) * MS_PER_TICK);
+                timerStartTick == null ? 0 : (gameLine.tick - timerStartTick) * MS_PER_TICK,
+                finishTzhaarWave(gameLine.tick));
         }
         else if ((PERSONAL_BEST.matcher(message).find() || RAID_ROOM_COMPLETE.matcher(message).find())
             && (pendingRun == null || pendingRun.killCountLine.tick != gameLine.tick))
@@ -194,11 +210,76 @@ public class CompletedRunTracker
                 sendPendingRun();
             }
 
-            pendingRun = newPendingRun(gameLine, NO_KILL_COUNT, null, 0);
+            pendingRun = newPendingRun(gameLine, NO_KILL_COUNT, null, 0, null);
         }
     }
 
-    private PendingRun newPendingRun(GameLine gameLine, int killCount, String pluginTimerNpcName, long pluginTimerMs)
+    private boolean followTzhaarWaves(String message)
+    {
+        String text = Text.removeTags(message).trim();
+        Matcher waveStart = TZHAAR_WAVE_START.matcher(text);
+        if (waveStart.matches())
+        {
+            String content = tzhaarContentHere();
+            if (content != null)
+            {
+                int wave = Integer.parseInt(waveStart.group(1));
+                int ticksBeforeLine = INFERNO.equals(content) && wave == 1 ? INFERNO_TICKS_BEFORE_FIRST_WAVE_LINE : 0;
+                tzhaarWave = new TzhaarWave(content, wave, client.getTickCount() - ticksBeforeLine);
+            }
+            return true;
+        }
+
+        if (text.equals(TZHAAR_DEFEATED))
+        {
+            tzhaarWave = null;
+            return true;
+        }
+
+        if (!text.equals(TZHAAR_WAVE_COMPLETED) || tzhaarWave == null)
+        {
+            return false;
+        }
+
+        GameLine gameLine = new GameLine(client.getTickCount(), System.currentTimeMillis(), message);
+        TimedWave timedWave = finishTzhaarWave(gameLine.tick);
+        if (pendingRun != null)
+        {
+            sendPendingRun();
+        }
+        pendingRun = newPendingRun(gameLine, NO_KILL_COUNT, null, 0, timedWave);
+        return true;
+    }
+
+    private TimedWave finishTzhaarWave(int tick)
+    {
+        if (tzhaarWave == null)
+        {
+            return null;
+        }
+
+        TimedWave timedWave = new TimedWave(tzhaarWave.content, tzhaarWave.wave, (tick - tzhaarWave.startTick) * MS_PER_TICK);
+        tzhaarWave = null;
+        return timedWave;
+    }
+
+    private String tzhaarContentHere()
+    {
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer == null)
+        {
+            return null;
+        }
+
+        int region = WorldPoint.fromLocalInstance(client, localPlayer.getLocalLocation()).getRegionID();
+        if (region == INFERNO_REGION)
+        {
+            return INFERNO;
+        }
+        return region == FIGHT_CAVES_REGION ? FIGHT_CAVES : null;
+    }
+
+    private PendingRun newPendingRun(GameLine gameLine, int killCount, String pluginTimerNpcName, long pluginTimerMs, TimedWave timedWave)
     {
         return new PendingRun(
             gameLine,
@@ -209,7 +290,8 @@ public class CompletedRunTracker
             localPlayerName(),
             pluginTimerNpcName,
             pluginTimerMs,
-            new int[] {partySize(TOB_PARTY_SLOTS), partySize(TOA_PARTY_SLOTS), partySize(TFA_PARTY_SLOTS)});
+            new int[] {partySize(TOB_PARTY_SLOTS), partySize(TOA_PARTY_SLOTS), partySize(TFA_PARTY_SLOTS)},
+            timedWave);
     }
 
     private int partySize(int[] partySlotVarbits)
@@ -396,7 +478,7 @@ public class CompletedRunTracker
 
         if (longestCompletionTimeMs == 0)
         {
-            longestCompletionTimeMs = run.pluginTimerMs;
+            longestCompletionTimeMs = run.timedWave != null && run.killCount == NO_KILL_COUNT ? run.timedWave.durationMs : run.pluginTimerMs;
         }
 
         if (longestCompletionTimeMs == 0)
@@ -469,6 +551,15 @@ public class CompletedRunTracker
             pluginTimer.addProperty("npc", run.pluginTimerNpcName);
             pluginTimer.addProperty("duration_ms", run.pluginTimerMs);
             completedRun.add("plugin_timer", pluginTimer);
+        }
+
+        if (run.timedWave != null)
+        {
+            JsonObject waveTimer = new JsonObject();
+            waveTimer.addProperty("content", run.timedWave.content);
+            waveTimer.addProperty("wave", run.timedWave.wave);
+            waveTimer.addProperty("duration_ms", run.timedWave.durationMs);
+            completedRun.add("wave_timer", waveTimer);
         }
         completedRun.add("setup", setupSnapshots.setupAt(endMs - longestCompletionTimeMs));
 
@@ -587,9 +678,10 @@ public class CompletedRunTracker
         private final String pluginTimerNpcName;
         private final long pluginTimerMs;
         private final int[] raidPartySizes;
+        private final TimedWave timedWave;
 
         private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, String localPlayerName,
-            String pluginTimerNpcName, long pluginTimerMs, int[] raidPartySizes)
+            String pluginTimerNpcName, long pluginTimerMs, int[] raidPartySizes, TimedWave timedWave)
         {
             this.killCountLine = killCountLine;
             this.killCount = killCount;
@@ -600,6 +692,35 @@ public class CompletedRunTracker
             this.pluginTimerNpcName = pluginTimerNpcName;
             this.pluginTimerMs = pluginTimerMs;
             this.raidPartySizes = raidPartySizes;
+            this.timedWave = timedWave;
+        }
+    }
+
+    private static class TzhaarWave
+    {
+        private final String content;
+        private final int wave;
+        private final int startTick;
+
+        private TzhaarWave(String content, int wave, int startTick)
+        {
+            this.content = content;
+            this.wave = wave;
+            this.startTick = startTick;
+        }
+    }
+
+    private static class TimedWave
+    {
+        private final String content;
+        private final int wave;
+        private final long durationMs;
+
+        private TimedWave(String content, int wave, long durationMs)
+        {
+            this.content = content;
+            this.wave = wave;
+            this.durationMs = durationMs;
         }
     }
 }
