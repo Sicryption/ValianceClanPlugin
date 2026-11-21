@@ -70,6 +70,7 @@ public class CompletedRunTracker
     private static final int LONGEST_PLUGIN_TIMED_FIGHT_TICKS = 3000;
     private static final int NO_KILL_COUNT = -1;
     private static final Pattern PERSONAL_BEST = Pattern.compile("(?i)personal best");
+    private static final Pattern TARGET_TIME = Pattern.compile("(?i)target time");
     private static final Pattern ROOM_DURATION = Pattern.compile("(?i)duration:\\s*(?:<[^>]*>)*\\s*(?<time>\\d+(?::\\d{2}){1,2}(?:\\.\\d{1,2})?)");
     private static final Pattern RAID_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>)*(?:wave '[^']+'.* complete!|challenge complete: |wave \\d+ completed! wave duration:)");
     private static final Pattern CHAMBERS_ROOM_COMPLETE = Pattern.compile("(?i)^(?:<[^>]*>|@[a-z0-9_]+@)*(?:(?:combat room|puzzle) `[^`]+` complete!|(?:upper|middle|lower) level complete!)");
@@ -471,7 +472,7 @@ public class CompletedRunTracker
         long longestCompletionTimeMs = 0;
         for (GameLine gameLine : gameLines)
         {
-            if (gameLine.tick == killCountLine.tick)
+            if (gameLine.tick == killCountLine.tick && !TARGET_TIME.matcher(gameLine.message).find())
             {
                 longestCompletionTimeMs = Math.max(longestCompletionTimeMs, longestTimeIn(gameLine.message));
             }
