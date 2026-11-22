@@ -38,6 +38,9 @@ import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.clan.ClanRank;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.ScriptCallbackEvent;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.game.ChatIconManager;
@@ -110,14 +113,26 @@ public class RankIcons
 
     private static class RankSlotSprite
     {
-        final int spriteId;
         final List<RankIcon> icons;
-        SpritePixels sprite;
+        final int width;
+        final int height;
+        final Map<String, Integer> spriteIdsByFrames = new HashMap<>();
 
-        RankSlotSprite(int spriteId, List<RankIcon> icons)
+        RankSlotSprite(List<RankIcon> icons)
         {
-            this.spriteId = spriteId;
             this.icons = icons;
+            int slotWidth = 0;
+            int slotHeight = RANK_SLOT_HEIGHT;
+            for (RankIcon icon : icons)
+            {
+                slotWidth += widestFrame(icon);
+                for (BufferedImage image : icon.images)
+                {
+                    slotHeight = Math.max(slotHeight, image.getHeight());
+                }
+            }
+            this.width = slotWidth;
+            this.height = slotHeight;
         }
     }
 
@@ -140,6 +155,7 @@ public class RankIcons
     private Map<String, List<String>> members = Collections.emptyMap();
     private final Map<String, RankIcon> icons = new HashMap<>();
     private final Map<String, RankSlotSprite> rankSlotSprites = new HashMap<>();
+    private int nextRankSlotSpriteId = RANK_SLOT_FIRST_SPRITE_ID;
     private static final Map<String, Integer> CHAT_ICON_ID_BY_RANK = new HashMap<>();
     private JsonObject ranksJson;
     private JsonObject iconsJson;
@@ -436,6 +452,7 @@ public class RankIcons
 
         long now = System.currentTimeMillis();
         IndexedSprite[] modIcons = client.getModIcons();
+        List<RankIcon> advanced = new ArrayList<>();
         for (RankIcon icon : icons.values())
         {
             if (icon.frames.size() < 2 || now < icon.nextFrameAt)
@@ -445,20 +462,18 @@ public class RankIcons
 
             icon.frame = (icon.frame + 1) % icon.frames.size();
             icon.nextFrameAt = now + icon.delays.get(icon.frame);
+            advanced.add(icon);
 
             int index = chatIconManager.chatIconIndex(icon.iconId);
             if (modIcons != null && index >= 0 && index < modIcons.length)
             {
                 modIcons[index] = icon.frames.get(icon.frame);
             }
+        }
 
-            for (RankSlotSprite slot : rankSlotSprites.values())
-            {
-                if (slot.icons.contains(icon))
-                {
-                    drawRankSlot(slot);
-                }
-            }
+        if (!advanced.isEmpty())
+        {
+            showCurrentRankSlotFrames(advanced);
         }
 
         lowerIconsAndRedrawOnceLoaded();
@@ -589,13 +604,82 @@ public class RankIcons
         }
         tags.appendTail(nameWithoutRankIcons);
 
-        RankSlotSprite slot = rankSlotSprites.computeIfAbsent(key.toString(),
-            iconIds -> new RankSlotSprite(RANK_SLOT_FIRST_SPRITE_ID - rankSlotSprites.size(), shown));
-        if (slot.sprite == null)
+        RankSlotSprite slot = rankSlotSprites.computeIfAbsent(key.toString(), iconIds -> new RankSlotSprite(shown));
+        return new RankSlot(currentSpriteId(slot), slot.width, slot.height, nameWithoutRankIcons.toString());
+    }
+
+    private static int widestFrame(RankIcon icon)
+    {
+        int widest = 0;
+        for (BufferedImage image : icon.images)
         {
-            drawRankSlot(slot);
+            widest = Math.max(widest, image.getWidth());
         }
-        return new RankSlot(slot.spriteId, slot.sprite.getWidth(), slot.sprite.getHeight(), nameWithoutRankIcons.toString());
+        return widest;
+    }
+
+    private void showCurrentRankSlotFrames(List<RankIcon> advanced)
+    {
+        Map<Integer, Integer> currentSpriteIdByShownId = new HashMap<>();
+        for (RankSlotSprite slot : rankSlotSprites.values())
+        {
+            if (slot.icons.stream().noneMatch(advanced::contains))
+            {
+                continue;
+            }
+
+            int current = currentSpriteId(slot);
+            for (int spriteId : slot.spriteIdsByFrames.values())
+            {
+                if (spriteId != current)
+                {
+                    currentSpriteIdByShownId.put(spriteId, current);
+                }
+            }
+        }
+        if (currentSpriteIdByShownId.isEmpty())
+        {
+            return;
+        }
+
+        Widget chatLines = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
+        Widget[] children = chatLines == null ? null : chatLines.getChildren();
+        if (children == null)
+        {
+            return;
+        }
+
+        for (Widget child : children)
+        {
+            if (child == null || child.getType() != WidgetType.GRAPHIC)
+            {
+                continue;
+            }
+
+            Integer current = currentSpriteIdByShownId.get(child.getSpriteId());
+            if (current != null)
+            {
+                child.setSpriteId(current);
+            }
+        }
+    }
+
+    private int currentSpriteId(RankSlotSprite slot)
+    {
+        StringBuilder frames = new StringBuilder();
+        for (RankIcon icon : slot.icons)
+        {
+            frames.append(icon.frame).append(',');
+        }
+
+        Integer spriteId = slot.spriteIdsByFrames.get(frames.toString());
+        if (spriteId == null)
+        {
+            spriteId = nextRankSlotSpriteId--;
+            client.getSpriteOverrides().put(spriteId, drawRankSlot(slot));
+            slot.spriteIdsByFrames.put(frames.toString(), spriteId);
+        }
+        return spriteId;
     }
 
     private RankIcon iconAtChatIndex(int index)
@@ -610,51 +694,33 @@ public class RankIcons
         return null;
     }
 
-    private void drawRankSlot(RankSlotSprite slot)
+    private SpritePixels drawRankSlot(RankSlotSprite slot)
     {
-        int width = 0;
-        int height = RANK_SLOT_HEIGHT;
-        for (RankIcon icon : slot.icons)
-        {
-            BufferedImage image = icon.images.get(icon.frame);
-            width += image.getWidth();
-            height = Math.max(height, image.getHeight());
-        }
-
-        BufferedImage combined = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage combined = new BufferedImage(slot.width, slot.height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = combined.createGraphics();
         int x = 0;
         for (RankIcon icon : slot.icons)
         {
             BufferedImage image = icon.images.get(icon.frame);
-            graphics.drawImage(image, x, (height - image.getHeight()) / 2, null);
-            x += image.getWidth();
+            graphics.drawImage(image, x, (slot.height - image.getHeight()) / 2, null);
+            x += widestFrame(icon);
         }
         graphics.dispose();
 
-        SpritePixels sprite = ImageUtil.getImageSpritePixels(combined, client);
-        if (slot.sprite != null && slot.sprite.getWidth() == width && slot.sprite.getHeight() == height)
-        {
-            System.arraycopy(sprite.getPixels(), 0, slot.sprite.getPixels(), 0, sprite.getPixels().length);
-            return;
-        }
-
-        boolean replacing = slot.sprite != null;
-        slot.sprite = sprite;
-        client.getSpriteOverrides().put(slot.spriteId, sprite);
-        if (replacing)
-        {
-            client.getWidgetSpriteCache().reset();
-        }
+        return ImageUtil.getImageSpritePixels(combined, client);
     }
 
     private void clearRankSlots()
     {
         for (RankSlotSprite slot : rankSlotSprites.values())
         {
-            client.getSpriteOverrides().remove(slot.spriteId);
+            for (int spriteId : slot.spriteIdsByFrames.values())
+            {
+                client.getSpriteOverrides().remove(spriteId);
+            }
         }
         rankSlotSprites.clear();
+        nextRankSlotSpriteId = RANK_SLOT_FIRST_SPRITE_ID;
         client.getWidgetSpriteCache().reset();
     }
 
