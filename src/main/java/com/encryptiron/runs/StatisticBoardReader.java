@@ -30,6 +30,7 @@ import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.ObjectID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetType;
 import net.runelite.client.eventbus.Subscribe;
@@ -45,9 +46,12 @@ public class StatisticBoardReader
     private static final int FULLY_TRANSPARENT = 255;
     private static final int COVER_TO_TEXT_AREA = 9;
     private static final Set<Integer> NEVER_BOARDS = Set.of(InterfaceID.CHATBOX, InterfaceID.PM_CHAT, InterfaceID.CHATCHANNEL_CURRENT);
+    private static final String BRUTUS = "Brutus";
+    private static final String DEMONIC_BRUTUS = "Demonic Brutus";
+    private static final Pattern ONLY_DIGITS = Pattern.compile("[0-9]+");
     private static final Map<Integer, String> BOSS_BY_SCOREBOARD_OBJECT = Map.of(
-        ObjectID.COWBOSS_SCOREBOARD, "Brutus",
-        ObjectID.COWBOSS_SCOREBOARD_UBER, "Demonic Brutus");
+        ObjectID.COWBOSS_SCOREBOARD, BRUTUS,
+        ObjectID.COWBOSS_SCOREBOARD_UBER, DEMONIC_BRUTUS);
     private static final Set<Integer> BOARDS_NAMED_BY_THE_OBJECT_CLICKED = Set.of(InterfaceID.COWBOSS_SCOREBOARD);
     private static final int MOST_TICKS_FROM_CLICK_TO_BOARD = 50;
     private static final Set<MenuAction> GAME_OBJECT_OPTIONS = EnumSet.of(
@@ -257,7 +261,7 @@ public class StatisticBoardReader
             texts.add(entry);
         }
 
-        String boss = bossByBoard.get(interfaceId);
+        String boss = boardBoss(interfaceId);
         String board = boss + "|" + boardContent(boardTexts);
         boolean unchangedSinceLastRead = board.equals(lastReadBoardByInterface.put(interfaceId, board));
         if (unchangedSinceLastRead && !board.equals(lastSentBoardByInterface.get(interfaceId)))
@@ -267,6 +271,30 @@ public class StatisticBoardReader
         }
 
         return true;
+    }
+
+    private String boardBoss(int interfaceId)
+    {
+        if (interfaceId != InterfaceID.COWBOSS_SCOREBOARD)
+        {
+            return bossByBoard.get(interfaceId);
+        }
+
+        Widget personalKillCount = client.getWidget(InterfaceID.CowbossScoreboard.PKC_CONTENT);
+        String killCountText = personalKillCount == null ? "" : Text.removeTags(personalKillCount.getText()).replace(",", "").trim();
+        if (!ONLY_DIGITS.matcher(killCountText).matches())
+        {
+            return bossByBoard.get(interfaceId);
+        }
+
+        int killCount = Integer.parseInt(killCountText);
+        boolean isBrutus = killCount == client.getVarpValue(VarPlayerID.TOTAL_COWBOSS_KILLS);
+        boolean isDemonicBrutus = killCount == client.getVarpValue(VarPlayerID.TOTAL_COWBOSS_HARDMODE_KILLS);
+        if (isBrutus != isDemonicBrutus)
+        {
+            return isBrutus ? BRUTUS : DEMONIC_BRUTUS;
+        }
+        return bossByBoard.get(interfaceId);
     }
 
     private static String boardContent(List<BoardText> boardTexts)
