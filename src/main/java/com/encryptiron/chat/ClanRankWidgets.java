@@ -1,10 +1,7 @@
 package com.encryptiron.chat;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.inject.Inject;
@@ -13,10 +10,9 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.ScriptID;
-import net.runelite.api.events.BeforeRender;
-import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ScriptPostFired;
+import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetPositionMode;
@@ -36,7 +32,10 @@ public class ClanRankWidgets
 
     private static final int CLAN_RANK_SPRITES_ENUM = 3798;
 
-    private static final int CHAT_LINE_BUILD_SCRIPT = 84;
+    private static final int CHAT_LINE_LAYOUT_SCRIPT = 4483;
+    private static final int CHAT_LINE_LAYOUT_STRING_ARGUMENTS = 3;
+    private static final int CHAT_LINE_LAYOUT_INT_ARGUMENTS = 14;
+    private static final int NO_GRAPHIC = -1;
 
     @Inject
     private Client client;
@@ -48,27 +47,44 @@ public class ClanRankWidgets
     private RankIcons rankIcons;
 
     private Set<Integer> clanRankSprites;
-    private boolean chatRebuilt;
     private int decoratedRanksRevision = -1;
+
+    @Subscribe
+    public void onScriptPreFired(ScriptPreFired event)
+    {
+        if (event.getScriptId() != CHAT_LINE_LAYOUT_SCRIPT
+            || client.getObjectStackSize() < CHAT_LINE_LAYOUT_STRING_ARGUMENTS
+            || client.getIntStackSize() < CHAT_LINE_LAYOUT_INT_ARGUMENTS)
+        {
+            return;
+        }
+
+        Object[] strings = client.getObjectStack();
+        int prefixIndex = client.getObjectStackSize() - CHAT_LINE_LAYOUT_STRING_ARGUMENTS;
+        int nameIndex = prefixIndex + 1;
+        if (!(strings[prefixIndex] instanceof String) || !(strings[nameIndex] instanceof String))
+        {
+            return;
+        }
+
+        String prefix = (String) strings[prefixIndex];
+        String name = (String) strings[nameIndex];
+        if (!Text.removeTags(prefix).contains(CHANNEL_PREFIX) && !rankIcons.showsRankIcon(name))
+        {
+            return;
+        }
+
+        client.getIntStack()[client.getIntStackSize() - CHAT_LINE_LAYOUT_INT_ARGUMENTS] = NO_GRAPHIC;
+        strings[nameIndex] = RANK_TITLE_BEFORE_NAME.matcher(name).replaceFirst("");
+    }
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired event)
     {
-        int scriptId = event.getScriptId();
-        if (scriptId == ScriptID.BUILD_CHATBOX || scriptId == CHAT_LINE_BUILD_SCRIPT)
-        {
-            chatRebuilt = true;
-        }
-        else if (scriptId == ScriptID.CLAN_SIDEPANEL_DRAW)
+        if (event.getScriptId() == ScriptID.CLAN_SIDEPANEL_DRAW)
         {
             decoratePlayerLists();
         }
-    }
-
-    @Subscribe
-    public void onChatMessage(ChatMessage event)
-    {
-        chatRebuilt = true;
     }
 
     public void redrawRanks()
@@ -91,20 +107,8 @@ public class ClanRankWidgets
     }
 
     @Subscribe
-    public void onBeforeRender(BeforeRender event)
-    {
-        if (chatRebuilt)
-        {
-            chatRebuilt = false;
-            hideChatRankGraphics();
-        }
-    }
-
-    @Subscribe
     public void onGameTick(GameTick tick)
     {
-        hideChatRankGraphics();
-
         if (rankIcons.getRanksRevision() != decoratedRanksRevision)
         {
             decoratedRanksRevision = rankIcons.getRanksRevision();
@@ -129,156 +133,6 @@ public class ClanRankWidgets
             }
         }
         return clanRankSprites.contains(widget.getSpriteId());
-    }
-
-    private void hideChatRankGraphics()
-    {
-        Widget area = client.getWidget(InterfaceID.Chatbox.SCROLLAREA);
-        if (area == null)
-        {
-            return;
-        }
-
-        List<Widget> texts = new ArrayList<>();
-        List<Widget> rankGraphics = new ArrayList<>();
-        collectTextsAndRankGraphics(area.getDynamicChildren(), texts, rankGraphics);
-        collectTextsAndRankGraphics(area.getStaticChildren(), texts, rankGraphics);
-
-        for (Widget graphic : rankGraphics)
-        {
-            if (isValianceRow(graphic, texts))
-            {
-                graphic.setHidden(true);
-                moveLineIntoHiddenGraphicSpace(graphic, texts);
-            }
-        }
-
-        for (Widget text : texts)
-        {
-            removeRankTitleBeforeName(text, texts);
-        }
-    }
-
-    private boolean isValianceRow(Widget anchor, List<Widget> texts)
-    {
-        for (Widget text : texts)
-        {
-            if (isOnRow(anchor, text)
-                && (Text.removeTags(text.getText()).contains(CHANNEL_PREFIX) || rankIcons.showsRankIcon(text.getText())))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void removeRankTitleBeforeName(Widget name, List<Widget> texts)
-    {
-        Matcher title = RANK_TITLE_BEFORE_NAME.matcher(name.getText());
-        if (!title.find()
-            || !name.getText().endsWith(":")
-            || name.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT
-            || !isValianceRow(name, texts))
-        {
-            return;
-        }
-
-        int titleWidth = name.getFont() == null ? 0 : name.getFont().getTextWidth(Text.removeTags(title.group()));
-        name.setText(name.getText().substring(title.end()));
-        if (titleWidth <= 0)
-        {
-            name.revalidate();
-            return;
-        }
-
-        if (name.getWidthMode() == WidgetSizeMode.ABSOLUTE)
-        {
-            name.setOriginalWidth(Math.max(0, name.getOriginalWidth() - titleWidth));
-        }
-        name.revalidate();
-
-        for (Widget text : texts)
-        {
-            if (text != name
-                && isOnRow(name, text)
-                && text.getXPositionMode() == WidgetPositionMode.ABSOLUTE_LEFT
-                && text.getOriginalX() > name.getOriginalX())
-            {
-                text.setOriginalX(text.getOriginalX() - titleWidth);
-                text.revalidate();
-            }
-        }
-    }
-
-    private void moveLineIntoHiddenGraphicSpace(Widget graphic, List<Widget> texts)
-    {
-        if (graphic.getXPositionMode() != WidgetPositionMode.ABSOLUTE_LEFT)
-        {
-            return;
-        }
-
-        List<Widget> rest = new ArrayList<>();
-        Widget name = null;
-        for (Widget text : texts)
-        {
-            if (isOnRow(graphic, text)
-                && text.getXPositionMode() == WidgetPositionMode.ABSOLUTE_LEFT
-                && text.getOriginalX() >= graphic.getOriginalX())
-            {
-                rest.add(text);
-                if (name == null || text.getOriginalX() < name.getOriginalX())
-                {
-                    name = text;
-                }
-            }
-        }
-
-        if (name == null)
-        {
-            return;
-        }
-
-        int shift = name.getOriginalX() - graphic.getOriginalX();
-        if (shift <= 0)
-        {
-            return;
-        }
-
-        for (Widget text : rest)
-        {
-            text.setOriginalX(text.getOriginalX() - shift);
-            text.revalidate();
-        }
-    }
-
-    private static boolean isOnRow(Widget graphic, Widget text)
-    {
-        int middle = graphic.getRelativeY() + graphic.getHeight() / 2;
-        return middle >= text.getRelativeY() && middle < text.getRelativeY() + text.getHeight();
-    }
-
-    private void collectTextsAndRankGraphics(Widget[] children, List<Widget> texts, List<Widget> rankGraphics)
-    {
-        if (children == null)
-        {
-            return;
-        }
-
-        for (Widget child : children)
-        {
-            if (child == null)
-            {
-                continue;
-            }
-            if (child.getType() == WidgetType.TEXT && !child.isHidden() && child.getText() != null && !child.getText().isEmpty())
-            {
-                texts.add(child);
-            }
-            else if (!child.isHidden() && isClanRankGraphic(child))
-            {
-                rankGraphics.add(child);
-            }
-        }
     }
 
     private void decoratePlayerLists()
