@@ -292,6 +292,7 @@ public class CompletedRunTracker
             client.getAccountHash(),
             client.getWorld(),
             client.getVarbitValue(VarbitID.TOA_CLIENT_RAID_LEVEL),
+            client.getVarbitValue(VarbitID.TFA_PREFERRED_MODE),
             localPlayerName(),
             pluginTimerNpcName,
             pluginTimerMs,
@@ -540,6 +541,7 @@ public class CompletedRunTracker
         varbits.addProperty("tob_party_size", run.raidPartySizes[0]);
         varbits.addProperty("toa_party_size", run.raidPartySizes[1]);
         varbits.addProperty("tfa_party_size", run.raidPartySizes[2]);
+        varbits.addProperty("tfa_preferred_mode", run.tfaPreferredMode);
 
         JsonObject completedRun = new JsonObject();
         completedRun.addProperty("account_hash", String.valueOf(run.accountHash));
@@ -713,20 +715,22 @@ public class CompletedRunTracker
         private final long accountHash;
         private final int world;
         private final int toaRaidLevel;
+        private final int tfaPreferredMode;
         private final String localPlayerName;
         private final String pluginTimerNpcName;
         private final long pluginTimerMs;
         private final int[] raidPartySizes;
         private final TimedWave timedWave;
 
-        private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, String localPlayerName,
-            String pluginTimerNpcName, long pluginTimerMs, int[] raidPartySizes, TimedWave timedWave)
+        private PendingRun(GameLine killCountLine, int killCount, long accountHash, int world, int toaRaidLevel, int tfaPreferredMode,
+            String localPlayerName, String pluginTimerNpcName, long pluginTimerMs, int[] raidPartySizes, TimedWave timedWave)
         {
             this.killCountLine = killCountLine;
             this.killCount = killCount;
             this.accountHash = accountHash;
             this.world = world;
             this.toaRaidLevel = toaRaidLevel;
+            this.tfaPreferredMode = tfaPreferredMode;
             this.localPlayerName = localPlayerName;
             this.pluginTimerNpcName = pluginTimerNpcName;
             this.pluginTimerMs = pluginTimerMs;
