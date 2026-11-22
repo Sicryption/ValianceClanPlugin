@@ -133,6 +133,7 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(rankIcons);
         eventBus.unregister(clanRankWidgets);
         clanChatService.shutDown();
+        rankIcons.shutDown();
         clanRankWidgets.redrawRanks();
 
         MessageHeaderData.reset();

@@ -36,6 +36,8 @@ public class ClanRankWidgets
     private static final int CHAT_LINE_LAYOUT_STRING_ARGUMENTS = 3;
     private static final int CHAT_LINE_LAYOUT_INT_ARGUMENTS = 14;
     private static final int NO_GRAPHIC = -1;
+    private static final int GRAPHIC_WIDTH_OFFSET = 1;
+    private static final int GRAPHIC_HEIGHT_OFFSET = 2;
 
     @Inject
     private Client client;
@@ -74,8 +76,21 @@ public class ClanRankWidgets
             return;
         }
 
-        client.getIntStack()[client.getIntStackSize() - CHAT_LINE_LAYOUT_INT_ARGUMENTS] = NO_GRAPHIC;
-        strings[nameIndex] = RANK_TITLE_BEFORE_NAME.matcher(name).replaceFirst("");
+        int[] ints = client.getIntStack();
+        int graphicIndex = client.getIntStackSize() - CHAT_LINE_LAYOUT_INT_ARGUMENTS;
+        String nameWithoutTitle = RANK_TITLE_BEFORE_NAME.matcher(name).replaceFirst("");
+        RankIcons.RankSlot rankSlot = rankIcons.rankSlot(nameWithoutTitle);
+        if (rankSlot == null)
+        {
+            ints[graphicIndex] = NO_GRAPHIC;
+            strings[nameIndex] = nameWithoutTitle;
+            return;
+        }
+
+        ints[graphicIndex] = rankSlot.spriteId;
+        ints[graphicIndex + GRAPHIC_WIDTH_OFFSET] = rankSlot.width;
+        ints[graphicIndex + GRAPHIC_HEIGHT_OFFSET] = rankSlot.height;
+        strings[nameIndex] = rankSlot.name;
     }
 
     @Subscribe

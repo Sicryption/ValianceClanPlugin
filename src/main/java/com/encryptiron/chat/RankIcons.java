@@ -1,5 +1,6 @@
 package com.encryptiron.chat;
 
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -31,6 +32,7 @@ import net.runelite.api.Client;
 import net.runelite.api.IconID;
 import net.runelite.api.IndexedSprite;
 import net.runelite.api.MessageNode;
+import net.runelite.api.SpritePixels;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
 import net.runelite.api.clan.ClanRank;
@@ -55,6 +57,8 @@ public class RankIcons
     private static final int RANK_ICON_OFFSET_Y = 2;
     private static final Pattern NAME_SPACING = Pattern.compile("[\\s_\\u00A0]+");
     private static final List<String> GUEST_RANKS = List.of("Guest");
+    private static final int RANK_SLOT_FIRST_SPRITE_ID = -760_000;
+    private static final int RANK_SLOT_HEIGHT = 13;
 
     private static final Set<Integer> NON_RANK_ACCOUNT_ICONS = Set.of(
         IconID.PLAYER_MODERATOR.getIndex(),
@@ -90,20 +94,52 @@ public class RankIcons
     {
         final int iconId;
         final List<IndexedSprite> frames;
+        final List<BufferedImage> images;
         final List<Integer> delays;
         int frame;
         long nextFrameAt;
 
-        RankIcon(int iconId, List<IndexedSprite> frames, List<Integer> delays)
+        RankIcon(int iconId, List<IndexedSprite> frames, List<BufferedImage> images, List<Integer> delays)
         {
             this.iconId = iconId;
             this.frames = frames;
+            this.images = images;
             this.delays = delays;
+        }
+    }
+
+    private static class RankSlotSprite
+    {
+        final int spriteId;
+        final List<RankIcon> icons;
+        SpritePixels sprite;
+
+        RankSlotSprite(int spriteId, List<RankIcon> icons)
+        {
+            this.spriteId = spriteId;
+            this.icons = icons;
+        }
+    }
+
+    static class RankSlot
+    {
+        final int spriteId;
+        final int width;
+        final int height;
+        final String name;
+
+        RankSlot(int spriteId, int width, int height, String name)
+        {
+            this.spriteId = spriteId;
+            this.width = width;
+            this.height = height;
+            this.name = name;
         }
     }
 
     private Map<String, List<String>> members = Collections.emptyMap();
     private final Map<String, RankIcon> icons = new HashMap<>();
+    private final Map<String, RankSlotSprite> rankSlotSprites = new HashMap<>();
     private static final Map<String, Integer> CHAT_ICON_ID_BY_RANK = new HashMap<>();
     private JsonObject ranksJson;
     private JsonObject iconsJson;
@@ -121,6 +157,11 @@ public class RankIcons
         socket.setHandler("ranks", body -> applyRanks(body, true));
         socket.setHandler("icons", body -> applyIcons(body, true));
         executor.execute(this::loadSaved);
+    }
+
+    public void shutDown()
+    {
+        clientThread.invoke(this::clearRankSlots);
     }
 
     public String getRanksVersion()
@@ -362,6 +403,7 @@ public class RankIcons
 
     private void installIcons(Map<String, DecodedIcon> decoded)
     {
+        clearRankSlots();
         icons.clear();
         long now = System.currentTimeMillis();
         for (Map.Entry<String, DecodedIcon> entry : decoded.entrySet())
@@ -378,7 +420,7 @@ public class RankIcons
                 frames.add(frame);
             }
 
-            RankIcon rankIcon = new RankIcon(iconId, frames, icon.delays);
+            RankIcon rankIcon = new RankIcon(iconId, frames, icon.frames, icon.delays);
             rankIcon.nextFrameAt = now + icon.delays.get(0);
             icons.put(entry.getKey(), rankIcon);
         }
@@ -408,6 +450,14 @@ public class RankIcons
             if (modIcons != null && index >= 0 && index < modIcons.length)
             {
                 modIcons[index] = icon.frames.get(icon.frame);
+            }
+
+            for (RankSlotSprite slot : rankSlotSprites.values())
+            {
+                if (slot.icons.contains(icon))
+                {
+                    drawRankSlot(slot);
+                }
             }
         }
 
@@ -515,6 +565,97 @@ public class RankIcons
             }
         }
         return false;
+    }
+
+    RankSlot rankSlot(String name)
+    {
+        List<RankIcon> shown = new ArrayList<>();
+        StringBuilder key = new StringBuilder();
+        StringBuffer nameWithoutRankIcons = new StringBuffer();
+        Matcher tags = IMG_TAG.matcher(name);
+        while (tags.find())
+        {
+            RankIcon icon = iconAtChatIndex(Integer.parseInt(tags.group(1)));
+            if (icon != null)
+            {
+                shown.add(icon);
+                key.append(icon.iconId).append(',');
+                tags.appendReplacement(nameWithoutRankIcons, "");
+            }
+        }
+        if (shown.isEmpty())
+        {
+            return null;
+        }
+        tags.appendTail(nameWithoutRankIcons);
+
+        RankSlotSprite slot = rankSlotSprites.computeIfAbsent(key.toString(),
+            iconIds -> new RankSlotSprite(RANK_SLOT_FIRST_SPRITE_ID - rankSlotSprites.size(), shown));
+        if (slot.sprite == null)
+        {
+            drawRankSlot(slot);
+        }
+        return new RankSlot(slot.spriteId, slot.sprite.getWidth(), slot.sprite.getHeight(), nameWithoutRankIcons.toString());
+    }
+
+    private RankIcon iconAtChatIndex(int index)
+    {
+        for (RankIcon icon : icons.values())
+        {
+            if (chatIconManager.chatIconIndex(icon.iconId) == index)
+            {
+                return icon;
+            }
+        }
+        return null;
+    }
+
+    private void drawRankSlot(RankSlotSprite slot)
+    {
+        int width = 0;
+        int height = RANK_SLOT_HEIGHT;
+        for (RankIcon icon : slot.icons)
+        {
+            BufferedImage image = icon.images.get(icon.frame);
+            width += image.getWidth();
+            height = Math.max(height, image.getHeight());
+        }
+
+        BufferedImage combined = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = combined.createGraphics();
+        int x = 0;
+        for (RankIcon icon : slot.icons)
+        {
+            BufferedImage image = icon.images.get(icon.frame);
+            graphics.drawImage(image, x, (height - image.getHeight()) / 2, null);
+            x += image.getWidth();
+        }
+        graphics.dispose();
+
+        SpritePixels sprite = ImageUtil.getImageSpritePixels(combined, client);
+        if (slot.sprite != null && slot.sprite.getWidth() == width && slot.sprite.getHeight() == height)
+        {
+            System.arraycopy(sprite.getPixels(), 0, slot.sprite.getPixels(), 0, sprite.getPixels().length);
+            return;
+        }
+
+        boolean replacing = slot.sprite != null;
+        slot.sprite = sprite;
+        client.getSpriteOverrides().put(slot.spriteId, sprite);
+        if (replacing)
+        {
+            client.getWidgetSpriteCache().reset();
+        }
+    }
+
+    private void clearRankSlots()
+    {
+        for (RankSlotSprite slot : rankSlotSprites.values())
+        {
+            client.getSpriteOverrides().remove(slot.spriteId);
+        }
+        rankSlotSprites.clear();
+        client.getWidgetSpriteCache().reset();
     }
 
     public String rankIconTags(String name)
