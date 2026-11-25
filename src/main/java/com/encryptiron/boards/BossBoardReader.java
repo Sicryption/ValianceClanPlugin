@@ -124,7 +124,8 @@ public class BossBoardReader
         switch (BoardWidgets.textOf(client, InterfaceID.NightmareScoreboard.TITLE_TEXT))
         {
             case "The Nightmare" + STATISTICS:
-                addShownTime(boardTimes, "Nightmare", InterfaceID.NightmareScoreboard.MS6);
+                BoardTime.ofShownTime("Nightmare", SOLO, WHOLE_RUN,
+                    BoardWidgets.textOf(client, InterfaceID.NightmareScoreboard.MS6)).ifPresent(boardTimes::add);
                 BoardTime.ofTicks("Nightmare", SIX_OR_MORE_PLAYERS, WHOLE_RUN,
                     client.getVarbitValue(VarbitID.NIGHTMARE_KILLTIME_BEST_6PLUS)).ifPresent(boardTimes::add);
                 break;

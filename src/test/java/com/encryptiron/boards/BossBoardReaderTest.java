@@ -98,13 +98,13 @@ public class BossBoardReaderTest
     }
 
     @Test
-    public void readsTheNightmareBoardAndItsSixOrMorePlayerVarbit()
+    public void readsTheNightmareBoardsSoloTimeAndItsSixOrMorePlayerVarbit()
     {
         game.textByComponent.put(InterfaceID.NightmareScoreboard.TITLE_TEXT, "The Nightmare Statistics");
         game.textByComponent.put(InterfaceID.NightmareScoreboard.MS6, "15:25.80");
         game.varbits.put(12961, 363);
         openAndTick(InterfaceID.NIGHTMARE_SCOREBOARD);
-        assertEquals(List.of("Nightmare|Any||15:25.80", "Nightmare|6+ players||363 ticks"), game.sentTimes());
+        assertEquals(List.of("Nightmare|Solo||15:25.80", "Nightmare|6+ players||363 ticks"), game.sentTimes());
     }
 
     @Test
