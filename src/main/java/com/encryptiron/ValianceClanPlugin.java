@@ -2,6 +2,12 @@ package com.encryptiron;
 
 import javax.inject.Inject;
 
+import com.encryptiron.boards.AllianceLogReader;
+import com.encryptiron.boards.BoardTimesSender;
+import com.encryptiron.boards.BossBoardReader;
+import com.encryptiron.boards.BrutusBoardReader;
+import com.encryptiron.boards.JadChallengeBoardReader;
+import com.encryptiron.boards.RaidBoardReader;
 import com.encryptiron.chat.ClanChatService;
 import com.encryptiron.chat.ClanRankWidgets;
 import com.encryptiron.chat.RankIcons;
@@ -13,7 +19,6 @@ import com.encryptiron.rest.SendCombatAchievements;
 import com.encryptiron.rest.SendItemDrop;
 import com.encryptiron.runs.AdventureLogReader;
 import com.encryptiron.runs.CompletedRunTracker;
-import com.encryptiron.runs.StatisticBoardReader;
 import com.google.inject.Provides;
 
 import lombok.extern.slf4j.Slf4j;
@@ -67,7 +72,22 @@ public class ValianceClanPlugin extends Plugin
     public AdventureLogReader adventureLogReader;
 
     @Inject
-    public StatisticBoardReader statisticBoardReader;
+    private AllianceLogReader allianceLogReader;
+
+    @Inject
+    private BoardTimesSender boardTimesSender;
+
+    @Inject
+    private BossBoardReader bossBoardReader;
+
+    @Inject
+    private BrutusBoardReader brutusBoardReader;
+
+    @Inject
+    private JadChallengeBoardReader jadChallengeBoardReader;
+
+    @Inject
+    private RaidBoardReader raidBoardReader;
 
     @Inject
     private PopUpQueue popUpQueue;
@@ -103,7 +123,12 @@ public class ValianceClanPlugin extends Plugin
         eventBus.register(onBossKilled);
         eventBus.register(completedRunTracker);
         eventBus.register(adventureLogReader);
-        eventBus.register(statisticBoardReader);
+        eventBus.register(allianceLogReader);
+        eventBus.register(boardTimesSender);
+        eventBus.register(bossBoardReader);
+        eventBus.register(brutusBoardReader);
+        eventBus.register(jadChallengeBoardReader);
+        eventBus.register(raidBoardReader);
         eventBus.register(popUpQueue);
 
         clanChatService.startUp();
@@ -125,7 +150,12 @@ public class ValianceClanPlugin extends Plugin
         eventBus.unregister(onBossKilled);
         eventBus.unregister(completedRunTracker);
         eventBus.unregister(adventureLogReader);
-        eventBus.unregister(statisticBoardReader);
+        eventBus.unregister(allianceLogReader);
+        eventBus.unregister(boardTimesSender);
+        eventBus.unregister(bossBoardReader);
+        eventBus.unregister(brutusBoardReader);
+        eventBus.unregister(jadChallengeBoardReader);
+        eventBus.unregister(raidBoardReader);
         eventBus.unregister(popUpQueue);
         clientThread.invoke(popUpQueue::clear);
 
