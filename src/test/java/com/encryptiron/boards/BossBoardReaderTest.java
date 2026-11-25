@@ -153,6 +153,25 @@ public class BossBoardReaderTest
     }
 
     @Test
+    public void sendsTheWholeBoardWhenAnyTimeIsNewAndNothingWhenNoneIs()
+    {
+        game.textByComponent.put(InterfaceID.DomScoreboard.P_TIME_FULL_VAL, "6:47.40");
+        game.hiddenComponents.add(InterfaceID.DomScoreboard.P_TIME_FULL_VAL);
+        game.varbits.put(17759, 36);
+        game.varbits.put(17760, 46);
+        openAndTick(InterfaceID.DOM_SCOREBOARD);
+        assertEquals(2, game.sent.get(0).size());
+
+        game.hiddenComponents.clear();
+        openAndTick(InterfaceID.DOM_SCOREBOARD);
+        assertEquals(3, game.sent.get(1).size());
+
+        game.hiddenComponents.add(InterfaceID.DomScoreboard.P_TIME_FULL_VAL);
+        openAndTick(InterfaceID.DOM_SCOREBOARD);
+        assertEquals(2, game.sent.size());
+    }
+
+    @Test
     public void skipsDoomsOverallTimeWhileItIsHidden()
     {
         game.textByComponent.put(InterfaceID.DomScoreboard.P_TIME_FULL_VAL, "6:47.40");

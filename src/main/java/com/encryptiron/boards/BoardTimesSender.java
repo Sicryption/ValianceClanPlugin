@@ -37,14 +37,15 @@ public class BoardTimesSender
 
     void send(List<BoardTime> boardTimes)
     {
-        if (boardTimes.isEmpty())
+        JsonArray times = new JsonArray();
+        boolean hasNewTime = false;
+        for (BoardTime boardTime : boardTimes)
         {
-            return;
+            times.add(boardTime.toJson());
+            hasNewTime |= timesSentThisLogin.add(boardTime.toJson().toString());
         }
 
-        JsonArray times = new JsonArray();
-        boardTimes.forEach(boardTime -> times.add(boardTime.toJson()));
-        if (timesSentThisLogin.add(times.toString()))
+        if (hasNewTime)
         {
             sendBoardTimes.send(times);
         }
