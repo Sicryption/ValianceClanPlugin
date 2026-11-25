@@ -29,9 +29,11 @@ import com.google.gson.JsonParseException;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
 import net.runelite.api.IconID;
 import net.runelite.api.IndexedSprite;
 import net.runelite.api.MessageNode;
+import net.runelite.api.NodeCache;
 import net.runelite.api.SpritePixels;
 import net.runelite.api.clan.ClanChannel;
 import net.runelite.api.clan.ClanChannelMember;
@@ -329,7 +331,12 @@ public class RankIcons
             {
                 if (generation != iconsGeneration)
                 {
-                    return;
+                    return true;
+                }
+
+                if (client.getGameState().getState() < GameState.LOGIN_SCREEN.getState())
+                {
+                    return false;
                 }
 
                 installIcons(decoded);
@@ -341,6 +348,7 @@ public class RankIcons
                     save();
                 }
                 client.refreshChat();
+                return true;
             });
         });
     }
@@ -721,7 +729,11 @@ public class RankIcons
         }
         rankSlotSprites.clear();
         nextRankSlotSpriteId = RANK_SLOT_FIRST_SPRITE_ID;
-        client.getWidgetSpriteCache().reset();
+        NodeCache widgetSpriteCache = client.getWidgetSpriteCache();
+        if (widgetSpriteCache != null)
+        {
+            widgetSpriteCache.reset();
+        }
     }
 
     public String rankIconTags(String name)
